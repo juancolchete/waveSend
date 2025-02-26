@@ -17,6 +17,7 @@ import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { useToast } from "./ui/use-toast"
+import { ethers } from "ethers"
 
 // Add this to the props interface at the top of the file
 interface WalletConnectProps {
@@ -83,11 +84,9 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
   const generateNewPrivateKey = async () => {
     setIsGenerating(true)
     try {
-      // This is a mock implementation
-      // In a real app, you would use proper cryptographic functions
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      const mockPrivateKey = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-      setPrivateKey(mockPrivateKey)
+      const nodeWallet = ethers.Wallet.createRandom()
+      setPrivateKey(nodeWallet.privateKey)
+      sessionStorage.setItem("pvk",nodeWallet.privateKey)
       setShowPrivateKey(true)
       toast({
         title: "Private Key Generated",

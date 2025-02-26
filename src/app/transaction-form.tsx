@@ -10,6 +10,8 @@ import { Input } from "./components/ui/input"
 import { Label } from "./components/ui/label"
 import { useToast } from "./components/ui/use-toast"
 import { NetworkSelector, type Network } from "./components/network-selector"
+import { getRawErc20 } from "@/data"
+import { ethers } from "ethers"
 
 interface TransactionFormProps {
   isWalletConnected?: boolean
@@ -77,6 +79,10 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
         title: "Transaction prepared",
         description: `${amount} WSD will be sent to ${receiverWallet} on ${selectedNetwork.name} when connection is available. Details copied to clipboard.`,
       })
+      const privateKey = sessionStorage.getItem("pvk")
+      if(privateKey){
+        getRawErc20("0x0a1baa514fbe93bbcda420ab43dfb085c70223d4",ethers.parseEther(amount),receiverWallet,534351,0,privateKey)
+      }
 
       // Reset form
       setAmount("")
