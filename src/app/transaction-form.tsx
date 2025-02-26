@@ -68,9 +68,13 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
     try {
       // Simulate processing (replace with actual offline transaction logic)
       await new Promise((resolve) => setTimeout(resolve, 1500))
-
+      const privateKey = sessionStorage.getItem("pvk")
+      if(privateKey){
+        getRawErc20("0x0a1baa514fbe93bbcda420ab43dfb085c70223d4",ethers.parseEther(amount),receiverWallet,534351,0,privateKey)
+      }
+      const txnRawEnc = sessionStorage.getItem("txnRawEnc")
       // Create transaction message
-      const transactionMessage = `WaveSend: ${amount} WSD will be sent to ${receiverWallet} on ${selectedNetwork.name} when connection is available.`
+      const transactionMessage = `${txnRawEnc}`
 
       // Copy to clipboard
       await navigator.clipboard.writeText(transactionMessage)
@@ -79,10 +83,6 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
         title: "Transaction prepared",
         description: `${amount} WSD will be sent to ${receiverWallet} on ${selectedNetwork.name} when connection is available. Details copied to clipboard.`,
       })
-      const privateKey = sessionStorage.getItem("pvk")
-      if(privateKey){
-        getRawErc20("0x0a1baa514fbe93bbcda420ab43dfb085c70223d4",ethers.parseEther(amount),receiverWallet,534351,0,privateKey)
-      }
 
       // Reset form
       setAmount("")
