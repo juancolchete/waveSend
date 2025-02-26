@@ -5,17 +5,18 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData()
-  const rawBody =formData.get("Body")
-  let sepBody = rawBody?.toString().split(",")
-  sepBody = sepBody ? sepBody : []
-  console.log(sepBody[2])
-  const rawTxn = decodeFromBase(sepBody[2],parseInt(sepBody[0]))
-  const config = {
-    method: 'get',
-    maxBodyLength: Infinity,
-    url:'',
-    headers: { }
-  };
+  console.log(formData)
+  // const rawBody =formData.get("Body")
+  // let sepBody = rawBody?.toString().split(",")
+  // sepBody = sepBody ? sepBody : []
+  // console.log(sepBody[2])
+  // const rawTxn = decodeFromBase(sepBody[2],parseInt(sepBody[0]))
+  // const config = {
+  //   method: 'get',
+  //   maxBodyLength: Infinity,
+  //   url:'',
+  //   headers: { }
+  // };
   // const sendUserTxn = async(txnId:string)=>{
   //   const reqconfig = {
   //     method: 'post',
