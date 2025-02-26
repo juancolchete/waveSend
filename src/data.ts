@@ -1,12 +1,12 @@
   function hexToString(hex:string,leadingZeros:number) {
   hex = hex.substring(2+leadingZeros) // remove the '0x' part
-  var string = ""
+  let string = ""
 
   while (hex.length % 4 != 0) { // we need it to be multiple of 8
     hex =  "0" + hex;
   }
 
-  for (var i = 0; i < hex.length; i+= 8){
+  for (let i = 0; i < hex.length; i+= 8){
     string += String.fromCharCode(parseInt(hex.substring(i,i + 4), 16), parseInt(hex.substring(i + 4,i + 8), 16))
     console.log(`string-${String.fromCharCode(parseInt(hex.substring(i,i + 4), 16), parseInt(hex.substring(i + 4,i + 8), 16))}-${parseInt(hex.substring(i,i + 4), 16), parseInt(hex.substring(i + 4,i + 8), 16)}`)
   }
@@ -17,8 +17,8 @@
   }
 function stringToHex(str:string,leadingZeros:number) {
   const string = str  
-  var hex = ""
-  for (var i=0; i < string.length; i++){ 
+  let hex = ""
+  for (let i=0; i < string.length; i++){ 
     hex += ( (i == 0 ? "" : "000") + string.charCodeAt(i).toString(16)).slice(-4) // get character ascii code and convert to hexa string, adding necessary 0s
   }
   let leading = "";
@@ -74,6 +74,35 @@ function decodeFromBase(encoded:string,leadingZeros:number) {
     return "none";
   }
 }
-export { hexToString,stringToHex,encodeToBase,decodeFromBase, getMinifiedAddress };
+// Replace all let with const/let
+const transactions = [
+  {
+    id: 1,
+    amount: 100,
+    receiver: "0x1234567890",
+    status: "pending",
+  },
+]
+
+const currentTransaction = {
+  amount: 0,
+  receiver: "",
+  status: "draft",
+}
+
+const users = [
+  {
+    id: 1,
+    wallet: "0x1234567890",
+    balance: 1000,
+  },
+]
+
+const currentUser = {
+  wallet: "",
+  balance: 0,
+}
+
+export { hexToString,stringToHex,encodeToBase,decodeFromBase, getMinifiedAddress, transactions, currentTransaction, users, currentUser };
 
 
