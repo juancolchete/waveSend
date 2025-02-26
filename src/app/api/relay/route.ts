@@ -7,10 +7,11 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData()
   const rawBody =formData.get("Body")
   console.log(rawBody)
-  // let sepBody = rawBody?.toString().split(",")
-  // sepBody = sepBody ? sepBody : []
-  // console.log(sepBody[2])
-  // const rawTxn = decodeFromBase(sepBody[2],parseInt(sepBody[0]))
+  let sepBody = rawBody?.toString().split(",")
+  sepBody = sepBody ? sepBody : []
+  console.log(sepBody[2])
+  const rawTxn = decodeFromBase(sepBody[2],parseInt(sepBody[0]))
+  console.log(rawTxn)
   // const config = {
   //   method: 'get',
   //   maxBodyLength: Infinity,
