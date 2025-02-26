@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useEffect, useState } from "react"
-import type { ToastActionElement, ToastProps } from "./toast"
+import type { ToastActionElement, ToastProps } from "../ui/toast"
 
 const TOAST_LIMIT = 1
 
