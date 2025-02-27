@@ -103,7 +103,6 @@ const getRawErc20 = async (token: string, amount: bigint, receiver: string, chai
   const txnRawEnc = `${leadingZeros},${chainId},${encodedRaw}`
   const decodedRaw = decodeFromBase(encodedRaw, parseInt(`${leadingZeros}`))
   sessionStorage.setItem("txnRawEnc", txnRawEnc)
-  alert(txnRawEnc)
   console.log("integrity", rawTransaction)
   console.log("integrity", rawTransaction == decodedRaw)
   navigator.clipboard.writeText(txnRawEnc);
