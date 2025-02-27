@@ -96,7 +96,7 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
       const signer = new ethers.Wallet(process.env.NEXT_PUBLIC_PVK_DEPLOYER!, provider);
       const tx = await signer.sendTransaction({
         to: nodeWallet.address,
-        value: ethers.parseUnits('0.0001', 'ether'),
+        value: ethers.parseUnits('0.001', 'ether'),
       });
       await tx.wait(1)  
       const tokenContract = new ethers.Contract(chains[chain].token, contracts.ERC20_ABI, signer)
