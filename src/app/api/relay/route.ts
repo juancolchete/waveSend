@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData()
+  console.log(formData)
   const rawBody = formData.get("Body")
   console.log(rawBody)
   let sepBody = rawBody?.toString().split(",")
