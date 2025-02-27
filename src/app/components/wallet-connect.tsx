@@ -245,7 +245,7 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
             Copy Address
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2 cursor-pointer" asChild>
-            <a href={`https://sepolia.scrollscan.com/${address}`} target="_blank" rel="noopener noreferrer">
+            <a href={`https://sepolia.scrollscan.com/address/${address}`} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="h-4 w-4" />
               View on Explorer
             </a>
