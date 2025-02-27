@@ -35,7 +35,7 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
 
   const validatePrivateKey = (key: string) => {
     // Basic validation: check if it's a valid hex string of correct length
-    const privateKeyRegex = /^[0-9a-fA-F]{66}$/
+    const privateKeyRegex = /^0x[0-9a-fA-F]{64}$/
     return privateKeyRegex.test(key)
   }
 
