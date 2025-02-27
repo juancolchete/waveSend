@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Send, Wallet } from "lucide-react"
 
 import { Button } from "./components/ui/button"
@@ -18,8 +18,10 @@ interface TransactionFormProps {
 }
 
 export default function TransactionForm({ isWalletConnected = false }: TransactionFormProps) {
+  const [chain, setChain] = useState(534351)
   const [amount, setAmount] = useState("")
   const [receiverWallet, setReceiverWallet] = useState("")
+  const [nounce, setNounce] = useState("0")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedNetwork, setSelectedNetwork] = useState<Network>({
     id: "scroll",
@@ -32,9 +34,23 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
     setSelectedNetwork(network)
   }
 
+  const handleSetNounce = (nounce: string) =>{
+    setNounce(nounce)
+    sessionStorage.setItem(`nounce${chain}`,nounce)
+  }
+
+   useEffect(() => {
+      if(window){
+        const sNounce = sessionStorage.getItem(`nounce${chain}`)
+        if(sNounce){
+          setNounce(sNounce)
+        }
+     }
+   }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const chain = 534351; 
+    const chain = 534351;
 
     if (!isWalletConnected) {
       toast({
@@ -71,15 +87,14 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
       await new Promise((resolve) => setTimeout(resolve, 1500))
       const privateKey = sessionStorage.getItem("pvk")
       let nounce = sessionStorage.getItem(`nounce${chain}`)
-      if(nounce){
-        sessionStorage.setItem(`nounce${chain}`,`${parseInt(nounce)+1}`)
-        nounce = sessionStorage.getItem(`nounce${chain}`)
-      }else{
-        sessionStorage.setItem(`nounce${chain}`,"0")
+      if (!nounce) {
+        sessionStorage.setItem(`nounce${chain}`, "0")
         nounce = sessionStorage.getItem(`nounce${chain}`)
       }
-      if(privateKey && nounce){
-        getRawErc20("0xB3BF79Cc114926ED20b57f1fB8066fFEc56748EC",ethers.parseEther(amount),receiverWallet,534351,parseInt(nounce),privateKey)
+      if (privateKey && nounce) {
+        getRawErc20("0xB3BF79Cc114926ED20b57f1fB8066fFEc56748EC", ethers.parseEther(amount), receiverWallet, 534351, parseInt(nounce), privateKey)
+        sessionStorage.setItem(`nounce${chain}`, `${parseInt(nounce) + 1}`)
+        setNounce(nounce)
       }
       const txnRawEnc = sessionStorage.getItem("txnRawEnc")
       // Create transaction message
@@ -143,7 +158,6 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
               </div>
             </div>
           </div>
-
           <div className="space-y-2">
             <Label htmlFor="wallet">Receiver Wallet</Label>
             <div className="relative">
@@ -156,6 +170,20 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
                 disabled={!isWalletConnected}
               />
               <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="wallet">Nounce</Label>
+            <div className="relative">
+              <Input
+                id="wallet"
+                type="number"
+                placeholder="Enter wallet address"
+                value={nounce}
+                onChange={(e) => handleSetNounce(e.target.value)}
+                className="bg-white dark:bg-gray-950"
+                disabled={!isWalletConnected}
+              />
             </div>
           </div>
         </CardContent>
