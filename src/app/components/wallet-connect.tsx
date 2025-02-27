@@ -53,9 +53,8 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
     try {
       // Here you would normally use the private key to derive the address
       // This is a mock implementation
-      const pvk =sessionStorage.getItem("pvk")
-      if(pvk){
-        const hdNode = new ethers.Wallet(pvk)
+      sessionStorage.setItem("pvk",key)
+        const hdNode = new ethers.Wallet(key)
         setAddress(hdNode.address)
         setIsDialogOpen(false)
         setPrivateKey("")
@@ -64,7 +63,6 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
           title: "Wallet Connected",
           description: "Successfully connected to WaveSend",
         })
-      }
     } catch (err) {
       toast({
         variant: "destructive",
