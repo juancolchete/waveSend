@@ -88,7 +88,7 @@ const getRawErc20 = async (token: string, amount: bigint, receiver: string, chai
   const transaction = {
     to: token,
     value: 0,
-    gasLimit: '150000',
+    gasLimit: '60000',
     maxPriorityFeePerGas: ethers.parseUnits('0.09', 'gwei'),
     maxFeePerGas: ethers.parseUnits('0.09', 'gwei'),
     nonce,
