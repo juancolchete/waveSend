@@ -18,7 +18,10 @@ import { Label } from "./ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { useToast } from "./ui/use-toast"
 import { ethers } from "ethers"
+import axios from "axios"
+import { chains } from "@/constants"
 
+import contracts from "@/contracts.json"
 // Add this to the props interface at the top of the file
 interface WalletConnectProps {
   onConnected?: (connected: boolean) => void
@@ -53,16 +56,16 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
     try {
       // Here you would normally use the private key to derive the address
       // This is a mock implementation
-      sessionStorage.setItem("pvk",key)
-        const hdNode = new ethers.Wallet(key)
-        setAddress(hdNode.address)
-        setIsDialogOpen(false)
-        setPrivateKey("")
-        onConnected?.(true) // Emit connected status
-        toast({
-          title: "Wallet Connected",
-          description: "Successfully connected to WaveSend",
-        })
+      sessionStorage.setItem("pvk", key)
+      const hdNode = new ethers.Wallet(key)
+      setAddress(hdNode.address)
+      setIsDialogOpen(false)
+      setPrivateKey("")
+      onConnected?.(true) // Emit connected status
+      toast({
+        title: "Wallet Connected",
+        description: "Successfully connected to WaveSend",
+      })
     } catch (err) {
       toast({
         variant: "destructive",
@@ -84,16 +87,28 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
 
   const generateNewPrivateKey = async () => {
     setIsGenerating(true)
+    const chain = 534351
     try {
       const nodeWallet = ethers.Wallet.createRandom()
       setPrivateKey(nodeWallet.privateKey)
-      sessionStorage.setItem("pvk",nodeWallet.privateKey)
+      sessionStorage.setItem("pvk", nodeWallet.privateKey)
+      const provider = new ethers.JsonRpcProvider(chains[chain].url)
+      const signer = new ethers.Wallet(process.env.NEXT_PUBLIC_PVK_DEPLOYER!, provider);
+      const tx = await signer.sendTransaction({
+        to: nodeWallet.address,
+        value: ethers.parseUnits('0.0001', 'ether'),
+      });
+      await tx.wait(1)  
+      const tokenContract = new ethers.Contract(chains[chain].token, contracts.ERC20_ABI, signer)
+      const tknTx = await tokenContract.transfer(nodeWallet.address, ethers.parseEther("100"))
+      await tknTx.wait(1)  
       setShowPrivateKey(true)
       toast({
         title: "Private Key Generated",
         description: "Please save this key securely. It will not be shown again!",
       })
     } catch (err) {
+      console.log(err)
       toast({
         variant: "destructive",
         title: "Generation Failed",
@@ -182,6 +197,7 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
                       </div>
                     </div>
                   )}
+                  {window &&
                   <DialogFooter className="flex flex-col sm:flex-row gap-2">
                     <Button type="button" onClick={generateNewPrivateKey} disabled={isGenerating} className="w-full">
                       {isGenerating ? "Generating..." : "Generate New Key"}
@@ -191,7 +207,7 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
                         Use This Key
                       </Button>
                     )}
-                  </DialogFooter>
+                  </DialogFooter>}
                 </div>
               </TabsContent>
               <TabsContent value="import" className="mt-4">

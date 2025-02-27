@@ -3,7 +3,7 @@
 import type React from "react"
 import { useEffect, useState } from "react"
 import { Send, Wallet } from "lucide-react"
-
+import contracts from "@/contracts.json"
 import { Button } from "./components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./components/ui/card"
 import { Input } from "./components/ui/input"
@@ -12,6 +12,7 @@ import { useToast } from "./components/ui/use-toast"
 import { NetworkSelector, type Network } from "./components/network-selector"
 import { getRawErc20 } from "@/data"
 import { ethers } from "ethers"
+import { chains } from "@/constants"
 
 interface TransactionFormProps {
   isWalletConnected?: boolean
@@ -46,11 +47,10 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
           setNounce(sNounce)
         }
      }
-   }, []);
+   }, [chain]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const chain = 534351;
 
     if (!isWalletConnected) {
       toast({
@@ -92,7 +92,7 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
         nounce = sessionStorage.getItem(`nounce${chain}`)
       }
       if (privateKey && nounce) {
-        getRawErc20("0xB3BF79Cc114926ED20b57f1fB8066fFEc56748EC", ethers.parseEther(amount), receiverWallet, 534351, parseInt(nounce), privateKey)
+        getRawErc20(chains[chain].token, ethers.parseEther(amount), receiverWallet, chain, parseInt(nounce), privateKey)
         sessionStorage.setItem(`nounce${chain}`, `${parseInt(nounce) + 1}`)
         setNounce(nounce)
       }
