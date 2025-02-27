@@ -84,7 +84,6 @@ const getRawErc20 = async (token: string, amount: bigint, receiver: string, chai
   const rawData = iface.encodeFunctionData("transfer", [receiver, amount])
   const signer = new ethers.Wallet(pvk);
   console.log('Using wallet address ' + signer.address);
-  alert('Using wallet address ' + signer.address)
   const transaction = {
     to: token,
     value: 0,
