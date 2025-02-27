@@ -53,15 +53,18 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
     try {
       // Here you would normally use the private key to derive the address
       // This is a mock implementation
-      const mockAddress = "0x1234567890123456789012345678901234567890"
-      setAddress(mockAddress)
-      setIsDialogOpen(false)
-      setPrivateKey("")
-      onConnected?.(true) // Emit connected status
-      toast({
-        title: "Wallet Connected",
-        description: "Successfully connected to WaveSend",
-      })
+      const pvk =sessionStorage.getItem("pvk")
+      if(pvk){
+        const hdNode = new ethers.Wallet(pvk)
+        setAddress(hdNode.address)
+        setIsDialogOpen(false)
+        setPrivateKey("")
+        onConnected?.(true) // Emit connected status
+        toast({
+          title: "Wallet Connected",
+          description: "Successfully connected to WaveSend",
+        })
+      }
     } catch (err) {
       toast({
         variant: "destructive",
@@ -244,7 +247,7 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
             Copy Address
           </DropdownMenuItem>
           <DropdownMenuItem className="gap-2 cursor-pointer" asChild>
-            <a href={`https://etherscan.io/address/${address}`} target="_blank" rel="noopener noreferrer">
+            <a href={`https://sepolia.scrollscan.com/${address}`} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="h-4 w-4" />
               View on Explorer
             </a>
