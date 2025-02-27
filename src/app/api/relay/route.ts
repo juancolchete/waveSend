@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
         Body: txnId
       }
     };
-
+    console.log(reqconfig)
     await axios.request(reqconfig)
   }
   const response = await axios.post(chains[sepBody[1]].url,{
