@@ -46,5 +46,7 @@ export async function POST(req: NextRequest) {
     ]
   })
   const data = response.data;
+  console.log(data)
+  sendUserTxn(data.result)
   return NextResponse.json({ data });
 }

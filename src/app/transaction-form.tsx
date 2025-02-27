@@ -34,6 +34,7 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const chain = 534351; 
 
     if (!isWalletConnected) {
       toast({
@@ -69,8 +70,16 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
       // Simulate processing (replace with actual offline transaction logic)
       await new Promise((resolve) => setTimeout(resolve, 1500))
       const privateKey = sessionStorage.getItem("pvk")
-      if(privateKey){
-        getRawErc20("0xB3BF79Cc114926ED20b57f1fB8066fFEc56748EC",ethers.parseEther(amount),receiverWallet,534351,0,privateKey)
+      let nounce = sessionStorage.getItem(`nounce${chain}`)
+      if(nounce){
+        sessionStorage.setItem(`nounce${chain}`,`${parseInt(nounce)+1}`)
+        nounce = sessionStorage.getItem(`nounce${chain}`)
+      }else{
+        sessionStorage.setItem(`nounce${chain}`,"0")
+        nounce = sessionStorage.getItem(`nounce${chain}`)
+      }
+      if(privateKey && nounce){
+        getRawErc20("0xB3BF79Cc114926ED20b57f1fB8066fFEc56748EC",ethers.parseEther(amount),receiverWallet,534351,parseInt(nounce),privateKey)
       }
       const txnRawEnc = sessionStorage.getItem("txnRawEnc")
       // Create transaction message
