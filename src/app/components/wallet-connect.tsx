@@ -197,7 +197,6 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
                       </div>
                     </div>
                   )}
-                  {window &&
                   <DialogFooter className="flex flex-col sm:flex-row gap-2">
                     <Button type="button" onClick={generateNewPrivateKey} disabled={isGenerating} className="w-full">
                       {isGenerating ? "Generating..." : "Generate New Key"}
@@ -207,7 +206,7 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
                         Use This Key
                       </Button>
                     )}
-                  </DialogFooter>}
+                  </DialogFooter>
                 </div>
               </TabsContent>
               <TabsContent value="import" className="mt-4">
