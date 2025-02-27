@@ -70,7 +70,7 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
       await new Promise((resolve) => setTimeout(resolve, 1500))
       const privateKey = sessionStorage.getItem("pvk")
       if(privateKey){
-        getRawErc20("0x0a1baa514fbe93bbcda420ab43dfb085c70223d4",ethers.parseEther(amount),receiverWallet,534351,0,privateKey)
+        getRawErc20("0xB3BF79Cc114926ED20b57f1fB8066fFEc56748EC",ethers.parseEther(amount),receiverWallet,534351,0,privateKey)
       }
       const txnRawEnc = sessionStorage.getItem("txnRawEnc")
       // Create transaction message
