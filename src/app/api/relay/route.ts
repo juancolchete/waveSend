@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       const provider = new ethers.JsonRpcProvider(chains[sepBody[1]].url)
       const txn = await provider.waitForTransaction(txnId)
       if(txn){
-        const response = await axios.post(chains[sepBody[1]].url, {
+        const response:any = await axios.post(chains[sepBody[1]].url, {
           "jsonrpc": "2.0",
           "id": "1",
           "method": "eth_sendRawTransaction",
@@ -40,7 +40,8 @@ export async function POST(req: NextRequest) {
             txn.from
           ]
         })
-        nounce = parseInt(eval("response.result"))
+        console.log("nouce",response )
+        nounce = parseInt(response.result)
       }
     }
     const reqconfig = {
