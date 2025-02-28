@@ -17,6 +17,6 @@ https://github.com/Dannilobr presencial
 ## Github do projeto
 https://github.com/juancolchete/waveSend
 ## Vídeo demo (colocar N/A se não houver)
-​https://youtu.be/n998oyeKzPo
+https://www.youtube.com/watch?v=n998oyeKzPo
 ## Apresentação Pitch Day (colocar N/A se não houver)
 https://github.com/juancolchete/waveSend/blob/main/pitch-deck.pdf
