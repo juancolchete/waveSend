@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
         const response:any = await axios.post(chains[sepBody[1]].url, {
           "jsonrpc": "2.0",
           "id": "1",
-          "method": "eth_sendRawTransaction",
+          "method": "eth_getTransactionCount",
           "params": [
             txn.from
           ]
