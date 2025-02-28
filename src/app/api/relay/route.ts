@@ -21,6 +21,24 @@ export async function POST(req: NextRequest) {
     headers: {}
   };
   const sendUserTxn = async (txnId: string) => {
+    const response = await axios.post(chains[sepBody[1]].url, {
+      "jsonrpc": "2.0",
+      "id": "1",
+      "method": "eth_sendRawTransaction",
+      "params": [
+        rawTxn
+      ]
+    })
+
+    const validatePrivateKey = (key: string) => {
+      // Basic validation: check if it's a valid hex string of correct length
+      const privateKeyRegex = /^0x[0-9a-fA-F]{64}$/
+      return privateKeyRegex.test(key)
+    }
+    let nounce = parseInt(eval("response.result"))
+    if (validatePrivateKey(txnId)) {
+      nounce++;
+    }
     const reqconfig = {
       method: 'post',
       maxBodyLength: Infinity,
@@ -32,17 +50,37 @@ export async function POST(req: NextRequest) {
       data: {
         To: formData.get("From"),
         From: process.env.NEXT_PUBLIC_TWILLIO_NUMBER,
-        Body: txnId
+        Body: `txnId ${txnId}`
       }
     };
     console.log(reqconfig)
-    try{
+    try {
       await axios.request(reqconfig)
-    }catch(e){
+    } catch (e) {
+      console.log(eval("e.response"))
+    }
+    const reqconfig2 = {
+      method: 'post',
+      maxBodyLength: Infinity,
+      url: `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILLIO_ACCOUNT}/Messages.json`,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': process.env.TWILLIO_TOKEN
+      },
+      data: {
+        To: formData.get("From"),
+        From: process.env.NEXT_PUBLIC_TWILLIO_NUMBER,
+        Body: `nounce ${nounce}`
+      }
+    };
+    console.log(reqconfig2)
+    try {
+      await axios.request(reqconfig2)
+    } catch (e) {
       console.log(eval("e.response"))
     }
   }
-  const response = await axios.post(chains[sepBody[1]].url,{
+  const response = await axios.post(chains[sepBody[1]].url, {
     "jsonrpc": "2.0",
     "id": "1",
     "method": "eth_sendRawTransaction",
