@@ -3,6 +3,7 @@ import { chains } from "@/constants";
 import { decodeFromBase } from "../../../data";
 import axios from "axios";
 import { NextRequest, NextResponse } from "next/server";
+import { ethers } from "ethers";
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData()
@@ -20,24 +21,27 @@ export async function POST(req: NextRequest) {
     url: '',
     headers: {}
   };
+  const validatePrivateKey = (key: string) => {
+    // Basic validation: check if it's a valid hex string of correct length
+    const privateKeyRegex = /^0x[0-9a-fA-F]{64}$/
+    return privateKeyRegex.test(key)
+  }
   const sendUserTxn = async (txnId: string) => {
-    const response = await axios.post(chains[sepBody[1]].url, {
-      "jsonrpc": "2.0",
-      "id": "1",
-      "method": "eth_sendRawTransaction",
-      "params": [
-        rawTxn
-      ]
-    })
-
-    const validatePrivateKey = (key: string) => {
-      // Basic validation: check if it's a valid hex string of correct length
-      const privateKeyRegex = /^0x[0-9a-fA-F]{64}$/
-      return privateKeyRegex.test(key)
-    }
-    let nounce = parseInt(eval("response.result"))
+    let nounce = 0; 
     if (validatePrivateKey(txnId)) {
-      nounce++;
+      const provider = new ethers.JsonRpcProvider(chains[sepBody[1]].url)
+      const txn = await provider.waitForTransaction(txnId)
+      if(txn){
+        const response = await axios.post(chains[sepBody[1]].url, {
+          "jsonrpc": "2.0",
+          "id": "1",
+          "method": "eth_sendRawTransaction",
+          "params": [
+            txn.from
+          ]
+        })
+        nounce = parseInt(eval("response.result"))
+      }
     }
     const reqconfig = {
       method: 'post',
