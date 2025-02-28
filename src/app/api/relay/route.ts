@@ -36,7 +36,11 @@ export async function POST(req: NextRequest) {
       }
     };
     console.log(reqconfig)
-    await axios.request(reqconfig)
+    try{
+      await axios.request(reqconfig)
+    }catch(e){
+      console.log(e)
+    }
   }
   const response = await axios.post(chains[sepBody[1]].url,{
     "jsonrpc": "2.0",
