@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
     console.log(reqconfig)
     try{
       await axios.request(reqconfig)
-    }catch(e: any){
-      console.log(e.response)
+    }catch(e){
+      console.log(eval("e.response"))
     }
   }
   const response = await axios.post(chains[sepBody[1]].url,{
