@@ -94,7 +94,7 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
       if (privateKey && nounce) {
         getRawErc20(chains[chain].token, ethers.parseEther(amount), receiverWallet, chain, parseInt(nounce), privateKey)
         sessionStorage.setItem(`nounce${chain}`, `${parseInt(nounce) + 1}`)
-        setNounce(nounce)
+        setNounce(nounce+1)
       }
       const txnRawEnc = sessionStorage.getItem("txnRawEnc")
       // Create transaction message
