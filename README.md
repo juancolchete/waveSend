@@ -12,19 +12,19 @@ flowchart TD
  subgraph subGraph0["📱 WaveSend App"]
         Frontend["🖌 Frontend React"]
         User[("👤 User")]
-        SMS["SMS"]
+        SMS["📨 SMS"]
         Twilio["🔧 Twilio API"]
         Backend["🔧 Backend Node.js"]
         Blockchain["Blockchain"]
   end
-    User -- Acess --> Frontend
-    Frontend -- Sign txn --> SMS
-    SMS -- Send signed Txn --> Twilio
-    Twilio -- Webhook --> Backend
-    Backend -- Callback --> Twilio
-    Backend -- Delivers to --> Blockchain
-    Blockchain -- Get Data --> Backend
-    Twilio -- Return Txn Data --> SMS
+    User -- &nbsp;&nbsp;Access&nbsp;&nbsp; --> Frontend
+    Frontend -- &nbsp;&nbsp;Sign txn&nbsp;&nbsp; --> SMS
+    SMS -- &nbsp;&nbsp;Send signed Txn&nbsp;&nbsp; --> Twilio
+    Twilio -- &nbsp;&nbsp;Webhook&nbsp;&nbsp; --> Backend
+    Backend -- &nbsp;&nbsp;Callback&nbsp;&nbsp; --> Twilio
+    Backend -- &nbsp;&nbsp;Delivers to&nbsp;&nbsp; --> Blockchain
+    Blockchain -- &nbsp;&nbsp;Get Data&nbsp;&nbsp; --> Backend
+    Twilio -- &nbsp;&nbsp;Return Txn Data&nbsp;&nbsp; --> SMS
 
     Blockchain@{ shape: cyl}
     style Frontend fill:#ebdef0,stroke:#8e44ad,stroke-width:2px
@@ -36,7 +36,8 @@ flowchart TD
     style subGraph0 fill: white
 
 
-%%{init:{'theme':'forest'}}%%
+%%{init:{'theme':'default'}}%%
+
 ```
 
 ## Main Features
