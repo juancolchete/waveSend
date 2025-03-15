@@ -19,12 +19,12 @@ flowchart TD
   end
     User -- &nbsp;&nbsp;Access&nbsp;&nbsp; --> Frontend
     Frontend -- &nbsp;&nbsp;Sign txn&nbsp;&nbsp; --> SMS
-    SMS -- &nbsp;&nbsp;Send signed Txn&nbsp;&nbsp; --> Twilio
+    SMS -- &nbsp;&nbsp;Send signed txn&nbsp;&nbsp; --> Twilio
     Twilio -- &nbsp;&nbsp;Webhook&nbsp;&nbsp; --> Backend
     Backend -- &nbsp;&nbsp;Callback&nbsp;&nbsp; --> Twilio
     Backend -- &nbsp;&nbsp;Delivers to&nbsp;&nbsp; --> Blockchain
     Blockchain -- &nbsp;&nbsp;Get Data&nbsp;&nbsp; --> Backend
-    Twilio -- &nbsp;&nbsp;Return Txn Data&nbsp;&nbsp; --> SMS
+    Twilio -- &nbsp;&nbsp;Return txn Data&nbsp;&nbsp; --> SMS
 
     Blockchain@{ shape: cyl}
     style Frontend fill:#ebdef0,stroke:#8e44ad,stroke-width:2px
@@ -37,6 +37,7 @@ flowchart TD
 
 
 %%{init:{'theme':'default'}}%%
+
 
 ```
 
