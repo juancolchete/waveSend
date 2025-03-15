@@ -9,22 +9,22 @@ Wave send (Contract WaveSend.sol) is a revolutionary digital wallet that enables
 
 ```mermaid
 flowchart TD
- subgraph subGraph0["📱 WaveSend App"]
-        Frontend["🖌 Frontend React"]
-        User[("👤 User")]
-        SMS["📨 SMS"]
-        Twilio["🔧 Twilio API"]
-        Backend["🔧 Backend Node.js"]
-        Blockchain["Blockchain"]
+ subgraph subGraph0["📱 <b>WAVESEND APP<b> 🌊"]
+        Frontend["🖌 <b>FRONTEND REACT<b>"]
+        User[("👤 <b>USER<b>")]
+        SMS["📨 <b>SMS<b>"]
+        Twilio["🔧 <b>TWILIO API<b>"]
+        Backend["🔧 <b>BACKEND NODE.JS<b>"]
+        Blockchain["<b>📜 Scroll BLOCKCHAIN<b>"]
   end
-    User -- &nbsp;&nbsp;Access&nbsp;&nbsp; --> Frontend
-    Frontend -- &nbsp;&nbsp;Sign txn&nbsp;&nbsp; --> SMS
-    SMS -- &nbsp;&nbsp;Send signed txn&nbsp;&nbsp; --> Twilio
-    Twilio -- &nbsp;&nbsp;Webhook&nbsp;&nbsp; --> Backend
-    Backend -- &nbsp;&nbsp;Callback&nbsp;&nbsp; --> Twilio
-    Backend -- &nbsp;&nbsp;Delivers to&nbsp;&nbsp; --> Blockchain
-    Blockchain -- &nbsp;&nbsp;Get Data&nbsp;&nbsp; --> Backend
-    Twilio -- &nbsp;&nbsp;Return txn Data&nbsp;&nbsp; --> SMS
+    User -- &nbsp;&nbsp;<b>ACCESS<b>&nbsp;&nbsp; --> Frontend
+    Frontend -- &nbsp;&nbsp;<b>SIGN TXN<b>&nbsp;&nbsp; --> SMS
+    SMS -- &nbsp;&nbsp;<b>SEND SIGNED TXN<b>&nbsp;&nbsp; --> Twilio
+    Twilio -- &nbsp;&nbsp;<b>WEBHOOK<b>&nbsp;&nbsp; --> Backend
+    Backend -- &nbsp;&nbsp;<b>CALLBACK<b>&nbsp;&nbsp; --> Twilio
+    Backend -- &nbsp;&nbsp;<b>DELIVERS TO<b>&nbsp;&nbsp; --> Blockchain
+    Blockchain -- &nbsp;&nbsp;<b>GET DATA<b>&nbsp;&nbsp; --> Backend
+    Twilio -- &nbsp;&nbsp;<b>RETURN TXN DATA<b>&nbsp;&nbsp; --> SMS
 
     Blockchain@{ shape: cyl}
     style Frontend fill:#ebdef0,stroke:#8e44ad,stroke-width:2px
@@ -37,6 +37,7 @@ flowchart TD
 
 
 %%{init:{'theme':'default'}}%%
+
 
 
 ```
