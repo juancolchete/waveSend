@@ -117,15 +117,16 @@ flowchart TD
 ### Phase 2: Expansion
 - Expansion to additional blockchain networks
 - Support for NFTs
-- Expasion to Lighitning NetWork
+- Expasion to Lightning Network
+- Native bridge with Scroll Network
 
 ### Phase 3: Partnership
-- Partnership with companies allowing payment with QR CODE.
-- Non Custodial wallet abstraction with phone number with Fireblocks.
+- Partnership with companies to pay with QR CODE
+- Non Custodial wallet abstraction with phone number with Fireblocks
 
 ### Phase 4: LoRa Integration
 - Implementation of LoRa technology for long-range communication
-- Development of LoRa-compatible hardware for areas without cellular coverage
+- Development of LoRa-compatible hardware for areas without phone coverage
 - Hybrid SMS/LoRa communication protocols for maximum resilience
 - Field testing in remote regions with limited infrastructure
 
