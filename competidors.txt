@@ -2,7 +2,7 @@
 | Company             | Amnesic | Auto Costodial  | Multi Asset | Smart Contracts | Send Ways          |
 |---------------------|---------|-----------------|-------------|-----------------|--------------------|
 | M-Pesa              | No      | No              | No          | No              | SMS with USSD      |
-| Telcoin             | No      | No              | Yes         | No              | SMS with USSD      |
+| Telcoin             | No      | No              | Yes         | Yes             | SMS with USSD      |
 | Orange Money        | No      | No              | No          | No              | SMS with USSD      |
 | Airtel Money        | No      | No              | No          | No              | SMS with USSD      |
 | Equity Bank         | No      | No              | No          | No              | SMS with USSD      | 
