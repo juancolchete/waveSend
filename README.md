@@ -69,7 +69,7 @@ flowchart TD
 - *Twilio*: Webhook (SMS API) - A webhook is the automated system that triggers the sending of the message.
 - *NextJS*: Applied nn the webapp.
 
-## Smart Contract Featureo
+## Smart Contract Feature
 
 ### Transaction Process 
 - initiateTransaction: Verifies the signature and queues the transaction for processing via SMS relay.
@@ -98,11 +98,12 @@ flowchart TD
 
 ### Phase 1: Deploy
 - Full deployment on Scroll Sepolia
-- Support for ERC-20 tokens
+- Support for ERC-20 tokens 
 
 ### Phase 2: Expansion
 - Expansion to additional blockchain networks
 - Support for NFTs
+- Expasion to Lighitning NetWork
 
 ### Phase 3: Partnership
 - Partnerships with humanitarian organizations for implementation in crisis areas.
