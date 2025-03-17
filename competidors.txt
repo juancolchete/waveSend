@@ -1,13 +1,13 @@
 ### Competidors
 | Company             | Amnesic | Auto Costodial  | Multi Asset | Smart Contracts | Send Ways          |
 |---------------------|---------|-----------------|-------------|-----------------|--------------------|
-| M-Pesa              | No      | No              | No          | No              | SMS / USSD         |
-| Telcoin             | No      | No              | Yes         | No              | SMS / USSD         |
-| Orange Money        | No      | No              | No          | No              | SMS / USSD         |
-| Airtel Money        | No      | No              | No          | No              | SMS / USSD         |
-| Equity Bank         | No      | No              | No          | No              | SMS / USSD         | 
-| Standard Bank       | No      | No              | No          | No              | SMS / USSD         |
-| Access Bank         | No      | No              | No          | No              | SMS / USSD         |
-| Eco Cash            | No      | No              | No          | No              | SMS / USSD         |
-| Machankura          | No      | No              | Yes         | No              | USSD               |
+| M-Pesa              | No      | No              | No          | No              | SMS with USSD      |
+| Telcoin             | No      | No              | Yes         | No              | SMS with USSD      |
+| Orange Money        | No      | No              | No          | No              | SMS with USSD      |
+| Airtel Money        | No      | No              | No          | No              | SMS with USSD      |
+| Equity Bank         | No      | No              | No          | No              | SMS with USSD      | 
+| Standard Bank       | No      | No              | No          | No              | SMS with USSD      |
+| Access Bank         | No      | No              | No          | No              | SMS with USSD      |
+| Eco Cash            | No      | No              | No          | No              | SMS with USSD      |
+| Machankura          | No      | No              | Yes         | No              | SMS with USSD      |
 | **WaveSend**        | Yes     | Yes             | Yes         | Yes             | SMS/LoRa (phase 4) |
