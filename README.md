@@ -47,7 +47,7 @@ flowchart TD
 ### For Consumers
 - *Keep Connection*: Consumers in regions with intermittent or no internet can still send and receive money using basic mobile phones.
 - *Beyond Disasters*: In natural disasters or crises, when data networks fail, users maintain access to financial services via SMS, ensuring they can manage funds in critical times.
-- *General Inclusion*: Reaches 1.7 billion people with limited internet access but basic phone ownership, offering them a gateway to financial services.
+- *General Inclusion*: Reaches 2.6 billion people with limited internet access but basic phone ownership, offering them a gateway to financial services.
 - *Low tech Acessibility*: No need for smartphones or stable data—just a simple phone with SMS capability, making it affordable and widely usable.
 - *High Efficiency*: The compact base188 encoding reduces SMS size and cost, making transactions affordable even in low-income regions.
 - *Transparency*: Receiving transaction IDs and nonces via SMS provides clear confirmation, giving users confidence in the process.
@@ -87,6 +87,20 @@ flowchart TD
 ### Security Enhancement
 - setRelayAddress: Restricts transaction processing to an authorized relay, enhancing security.
 
+## Competitors Comparison Chart
+
+
+| **Competitor** | **Amnesic** | **Auto Custodial** | **Multi Asset** | **Smart     Contracts** | **Send Ways** |
+| --- | --- | --- | --- | --- | --- |
+| M-Pesa |          ❌ |           ❌ |            ❌ |          ❌ | SMS with USSD |
+| Orange Money |          ❌ |          ❌ |           ❌ |           ❌ | SMS with USSD |
+| Airtel Money |          ❌ |          ❌ |           ❌ |           ❌ | SMS with USSD |
+| Standard Bank |         ❌ |          ❌  |           ❌ |           ❌ | SMS with USSD |
+| Access Bank |          ❌ |         ❌ |         ❌ |          ❌ | SMS with USSD |
+| Eco Cash |          ❌ |          ❌ |         ❌ |           ❌ | SMS with USSD |
+| Machankura |          ❌ |          ❌ |          ✅ |            ❌ | SMS with USSD |
+| **WaveSend** | ✅ |         ✅ |          ✅ |             ✅ | SMS/LoRa        (phase 4) |
+
 ## Advantages of the Scroll Network
 
 - **Ethereum Compatibility**: Simplifies connection with the Ethereum network.
@@ -106,7 +120,8 @@ flowchart TD
 - Expasion to Lighitning NetWork
 
 ### Phase 3: Partnership
-- Partnerships with humanitarian organizations for implementation in crisis areas.
+- Partnership with companies allowing payment with QR CODE.
+- Non Custodial wallet abstraction with phone number with Fireblocks.
 
 ### Phase 4: LoRa Integration
 - Implementation of LoRa technology for long-range communication
