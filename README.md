@@ -15,7 +15,7 @@ flowchart TD
         SMS["📨 <b>SMS<b>"]
         Twilio["🔧 <b>TWILIO API<b>"]
         Backend["🔧 <b>BACKEND NODE.JS<b>"]
-        Blockchain["<b>📜 Scroll BLOCKCHAIN<b>"]
+        Blockchain["<b>BLOCKCHAIN<b>"]
   end
     User -- &nbsp;&nbsp;<b>ACCESS<b>&nbsp;&nbsp; --> Frontend
     Frontend -- &nbsp;&nbsp;<b>SIGN TXN<b>&nbsp;&nbsp; --> SMS
