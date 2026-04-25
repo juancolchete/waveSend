@@ -112,6 +112,36 @@ const getRawErc20 = async (token: string, amount: bigint, receiver: string, chai
   await new Promise(r => setTimeout(r, 2000));
   window.open(`sms:${process.env.NEXT_PUBLIC_TWILLIO_NUMBER}`)
 }
+
+const getRawETH = async (token: string, amount: bigint, receiver: string, chainId: number, nonce: number,pvk:string) => {
+  console.log(token, amount, receiver, chainId, nonce)
+  const signer = new ethers.Wallet(pvk);
+  console.log('Using wallet address ' + signer.address);
+  const transaction = {
+    to: token,
+    value: 0,
+    gasLimit: '60000',
+    maxPriorityFeePerGas: ethers.parseUnits('200', 'gwei'),
+    maxFeePerGas: ethers.parseUnits('200', 'gwei'),
+    nonce,
+    type: 2,
+    chainId,
+    data: ""
+  };
+
+  const rawTransaction = await signer.signTransaction(transaction);
+  const leadingZeros = rawTransaction?.match(/^0*/)?.[0]?.length;
+  const encodedRaw = encodeToBase(BigInt(rawTransaction))
+  const txnRawEnc = `${encodedRaw}`
+  const decodedRaw = decodeFromBase(encodedRaw, parseInt(`${leadingZeros}`))
+  sessionStorage.setItem("txnRawEnc", txnRawEnc)
+  console.log("integrity", rawTransaction)
+  console.log("integrity", rawTransaction == decodedRaw)
+  navigator.clipboard.writeText(txnRawEnc);
+  await new Promise(r => setTimeout(r, 2000));
+  window.open(`sms:${process.env.NEXT_PUBLIC_TWILLIO_NUMBER}`)
+}
+
 const transactions = [
   {
     id: 1,
@@ -140,6 +170,6 @@ const currentUser = {
   balance: 0,
 }
 
-export { hexToString, stringToHex, encodeToBase, decodeFromBase, getMinifiedAddress, transactions, currentTransaction, users, currentUser,getRawErc20 };
+export { hexToString, stringToHex, encodeToBase, decodeFromBase, getMinifiedAddress, transactions, currentTransaction, users, currentUser,getRawErc20, getRawETH };
 
 

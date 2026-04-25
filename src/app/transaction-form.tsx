@@ -10,7 +10,7 @@ import { Input } from "./components/ui/input"
 import { Label } from "./components/ui/label"
 import { useToast } from "./components/ui/use-toast"
 import { NetworkSelector, type Network } from "./components/network-selector"
-import { getRawErc20 } from "@/data"
+import { getRawErc20, getRawETH } from "@/data"
 import { ethers } from "ethers"
 import { chains } from "@/constants"
 
@@ -20,6 +20,7 @@ interface TransactionFormProps {
 
 export default function TransactionForm({ isWalletConnected = false }: TransactionFormProps) {
   const [chain, setChain] = useState(42220)
+  const [currency, setCurrency] = useState("CELO");
   const [amount, setAmount] = useState("")
   const [receiverWallet, setReceiverWallet] = useState("")
   const [nounce, setNounce] = useState("0")
@@ -35,19 +36,19 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
     setSelectedNetwork(network)
   }
 
-  const handleSetNounce = (nounce: string) =>{
+  const handleSetNounce = (nounce: string) => {
     setNounce(nounce)
-    sessionStorage.setItem(`nounce${chain}`,nounce)
+    sessionStorage.setItem(`nounce${chain}`, nounce)
   }
 
-   useEffect(() => {
-      if(window){
-        const sNounce = sessionStorage.getItem(`nounce${chain}`)
-        if(sNounce){
-          setNounce(sNounce)
-        }
-     }
-   }, [chain]);
+  useEffect(() => {
+    if (window) {
+      const sNounce = sessionStorage.getItem(`nounce${chain}`)
+      if (sNounce) {
+        setNounce(sNounce)
+      }
+    }
+  }, [chain]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -92,7 +93,11 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
         nounce = sessionStorage.getItem(`nounce${chain}`)
       }
       if (privateKey && nounce) {
-        getRawErc20(chains[chain].token, ethers.parseEther(amount), receiverWallet, chain, parseInt(nounce), privateKey)
+        if (currency == "WSND"){
+          getRawErc20(chains[chain].token, ethers.parseEther(amount), receiverWallet, chain, parseInt(nounce), privateKey)
+        }else{
+          getRawETH(chains[chain].token, ethers.parseEther(amount), receiverWallet, chain, parseInt(nounce), privateKey)
+        }
         sessionStorage.setItem(`nounce${chain}`, `${parseInt(nounce) + 1}`)
         setNounce(`${parseInt(nounce) + 1}`)
       }
@@ -140,7 +145,7 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="amount">Amount (WSND)</Label>
+            <Label htmlFor="amount">Amount</Label>
             <div className="relative">
               <Input
                 id="amount"
@@ -153,8 +158,16 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
                 className="pr-16 bg-white dark:bg-gray-950"
                 disabled={!isWalletConnected}
               />
-              <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-muted-foreground bg-gray-50 dark:bg-gray-900 border-l rounded-r-md">
-                WSND
+              <div className="relative">
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground bg-gray-50 dark:bg-gray-900 border-l border-y-0 border-r-0 rounded-r-md cursor-pointer outline-none focus:ring-0"
+                >
+                  <option value="CELO">CELO</option>
+                  <option value="WSND">WSND</option>
+                </select>
+                <p className="mt-12 text-sm">You have selected to pay in: {currency}</p>
               </div>
             </div>
           </div>
