@@ -12,23 +12,28 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9 # Or your preferred version
+
       - name: Setup Node.js (LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*' # Automatically uses the latest LTS version
-          cache: 'npm'
+          node-version: 'lts/*'
+          cache: 'pnpm' # Now it will look for pnpm-lock.yaml
 
       - name: Install Dependencies
-        run: npm install
+        run: pnpm install
 
       - name: Build Next.js Static Export
-        run: npm run build
+        run: pnpm run build
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17' # Android Gradle Plugin 8+ requires Java 17
+          java-version: '17'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
