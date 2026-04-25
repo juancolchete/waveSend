@@ -20,6 +20,7 @@ import { useToast } from "./ui/use-toast"
 import { ethers } from "ethers"
 import axios from "axios"
 import { chains } from "@/constants"
+import QRCode from "react-qr-code";
 
 import contracts from "@/contracts.json"
 // Add this to the props interface at the top of the file
@@ -35,6 +36,7 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
   const [showPrivateKey, setShowPrivateKey] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const { toast } = useToast()
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const validatePrivateKey = (key: string) => {
     // Basic validation: check if it's a valid hex string of correct length
@@ -126,6 +128,28 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
         title: "Address Copied",
         description: "Wallet address copied to clipboard",
       })
+    }
+  }
+
+  const copyPVK = () => {
+    if (privateKey) {
+      navigator.clipboard.writeText(privateKey)
+      toast({
+        title: "Private Key Copied",
+        description: "Private key copied to clipboard",
+      })
+    }
+  }
+
+  const genQR = () => {
+    if (address) {
+      setIsModalOpen(true); // Open the modal
+      
+      navigator.clipboard.writeText(address);
+      toast({
+        title: "Address Copied",
+        description: "Wallet address copied to clipboard",
+      });
     }
   }
 
@@ -259,6 +283,14 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
             <Copy className="h-4 w-4" />
             Copy Address
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={copyPVK} className="gap-2 cursor-pointer">
+            <Copy className="h-4 w-4" />
+            Copy Private Key
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={genQR} className="gap-2 cursor-pointer">
+            <Copy className="h-4 w-4" />
+            Gen qrcode
+          </DropdownMenuItem>
           <DropdownMenuItem className="gap-2 cursor-pointer" asChild>
             <a href={`https://celoscan.io/address/${address}`} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="h-4 w-4" />
@@ -271,6 +303,36 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
         <ExternalLink className="h-4 w-4 rotate-180" />
         <span className="sr-only">Disconnect Wallet</span>
       </Button>
+      {isModalOpen && address && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          
+          {/* Modal Content Box */}
+          <div className="relative p-8 bg-white rounded-2xl shadow-xl flex flex-col items-center gap-6 animate-in fade-in zoom-in duration-200">
+            
+            {/* Close Button (X) */}
+            <button 
+              onClick={() => setIsModalOpen(false)}
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-800"
+              aria-label="Close modal"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+
+            <h3 className="text-lg font-semibold text-gray-900">Scan to Pay</h3>
+
+            <div className="p-2 bg-white rounded-xl border border-gray-100">
+              <QRCode 
+                value={address} 
+                size={250} 
+              />
+            </div>
+            
+            <p className="text-sm text-gray-500 break-all text-center max-w-[250px]">
+              {address}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
