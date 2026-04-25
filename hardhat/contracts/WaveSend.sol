@@ -7,7 +7,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract WaveSend is ERC20, Ownable {
     constructor()
-        ERC20("WaveSend", "WSD")
+        ERC20("WaveSend", "WSND")
         Ownable(msg.sender)
     {
         _mint(msg.sender, 1000000 * 10 ** decimals());
