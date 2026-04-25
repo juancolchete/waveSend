@@ -30,6 +30,11 @@ export async function POST(req: NextRequest) {
           Body: `txnId ${txnId}`
         }
       };
+      try {
+        await axios.request(reqconfig)
+      } catch (e) {
+        console.log(eval("e.response"))
+      }
     }
   }
   const response = await axios.post(chains["42220"].url, {
@@ -42,6 +47,6 @@ export async function POST(req: NextRequest) {
   })
   const data = response.data;
   console.log(data)
-  //await sendUserTxn(data.result)
+  await sendUserTxn(data.result)
   return NextResponse.json({ data });
 }
