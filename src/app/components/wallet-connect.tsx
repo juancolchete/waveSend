@@ -94,17 +94,6 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
       const nodeWallet = ethers.Wallet.createRandom()
       setPrivateKey(nodeWallet.privateKey)
       sessionStorage.setItem("pvk", nodeWallet.privateKey)
-      const provider = new ethers.JsonRpcProvider(chains[chain].url)
-      const signer = new ethers.Wallet(process.env.NEXT_PUBLIC_PVK_DEPLOYER!, provider);
-      const tx = await signer.sendTransaction({
-        to: nodeWallet.address,
-        value: ethers.parseUnits('0.001', 'ether'),
-      });
-      await tx.wait(1)  
-      const tokenContract = new ethers.Contract(chains[chain].token, contracts.ERC20_ABI, signer)
-      const tknTx = await tokenContract.transfer(nodeWallet.address, ethers.parseEther("100"))
-      await tknTx.wait(1)  
-      setShowPrivateKey(true)
       toast({
         title: "Private Key Generated",
         description: "Please save this key securely. It will not be shown again!",
