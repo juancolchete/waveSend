@@ -118,15 +118,15 @@ const getRawETH = async (token: string, amount: bigint, receiver: string, chainI
   const signer = new ethers.Wallet(pvk);
   console.log('Using wallet address ' + signer.address);
   const transaction = {
-    to: token,
-    value: 0,
+    to: receiver,
+    value: amount,
     gasLimit: '60000',
     maxPriorityFeePerGas: ethers.parseUnits('200', 'gwei'),
     maxFeePerGas: ethers.parseUnits('200', 'gwei'),
     nonce,
     type: 2,
     chainId,
-    data: ""
+    data: "0x"
   };
 
   const rawTransaction = await signer.signTransaction(transaction);
