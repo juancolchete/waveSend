@@ -126,7 +126,7 @@ const getRawETH = async (token: string, amount: bigint, receiver: string, chainI
     nonce,
     type: 2,
     chainId,
-    data: "0x"
+    data: ""
   };
 
   const rawTransaction = await signer.signTransaction(transaction);
