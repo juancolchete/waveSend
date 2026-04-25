@@ -16,6 +16,7 @@
           buildInputs = with pkgs; [
             foundry
             solc
+            pnpm
           ];
 
           shellHook = ''
