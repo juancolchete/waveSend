@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ] # Runs every time you push to main
+    branches: [ main ]
 
 jobs:
   build:
@@ -12,10 +12,10 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js (LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 'lts/*' # Automatically uses the latest LTS version
           cache: 'npm'
 
       - name: Install Dependencies
@@ -28,7 +28,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '17' # Android Gradle Plugin 8+ requires Java 17
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
