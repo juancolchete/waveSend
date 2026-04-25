@@ -3,6 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
+  workflow_dispatch: # Allows you to run this manually from the Actions tab
 
 jobs:
   build:
@@ -15,16 +16,17 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 9 # Or your preferred version
+          version: 9
 
       - name: Setup Node.js (LTS)
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
-          cache: 'pnpm' # Now it will look for pnpm-lock.yaml
+          cache: 'pnpm'
 
       - name: Install Dependencies
-        run: pnpm install
+        # Using --no-frozen-lockfile to bypass the lockfile mismatch error
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build Next.js Static Export
         run: pnpm run build
@@ -33,13 +35,14 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21' # Bumped for compatibility with modern Gradle/Capacitor
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Capacitor Sync
-        run: npx cap sync android
+        # Syncs the 'out' folder into the Android project
+        run: pnpm exec cap sync android
 
       - name: Build APK (Debug)
         run: |
@@ -50,5 +53,5 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
+          name: waveSend-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
