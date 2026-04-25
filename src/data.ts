@@ -63,7 +63,11 @@ function decodeFromBase(encoded: string, leadingZeros: number) {
   for (let i = 0; i < leadingZeros; i++) {
     leading += "0"
   }
-  return '0x' + leading + result.toString(16);
+  let hexStr = result.toString(16);
+  if (hexStr.length % 2 !== 0) {
+    hexStr = '0' + hexStr;
+  }
+  return '0x' + hexStr;
 }
 
 function getMinifiedAddress(address: string | null): string {
@@ -88,8 +92,8 @@ const getRawErc20 = async (token: string, amount: bigint, receiver: string, chai
     to: token,
     value: 0,
     gasLimit: '60000',
-    maxPriorityFeePerGas: ethers.parseUnits('0.2', 'gwei'),
-    maxFeePerGas: ethers.parseUnits('0.2', 'gwei'),
+    maxPriorityFeePerGas: ethers.parseUnits('200', 'gwei'),
+    maxFeePerGas: ethers.parseUnits('200', 'gwei'),
     nonce,
     type: 2,
     chainId,
@@ -99,7 +103,7 @@ const getRawErc20 = async (token: string, amount: bigint, receiver: string, chai
   const rawTransaction = await signer.signTransaction(transaction);
   const leadingZeros = rawTransaction?.match(/^0*/)?.[0]?.length;
   const encodedRaw = encodeToBase(BigInt(rawTransaction))
-  const txnRawEnc = `${leadingZeros},${chainId},${encodedRaw}`
+  const txnRawEnc = `${encodedRaw}`
   const decodedRaw = decodeFromBase(encodedRaw, parseInt(`${leadingZeros}`))
   sessionStorage.setItem("txnRawEnc", txnRawEnc)
   console.log("integrity", rawTransaction)
@@ -108,7 +112,6 @@ const getRawErc20 = async (token: string, amount: bigint, receiver: string, chai
   await new Promise(r => setTimeout(r, 2000));
   window.open(`sms:${process.env.NEXT_PUBLIC_TWILLIO_NUMBER}`)
 }
-// Replace all let with const/let
 const transactions = [
   {
     id: 1,

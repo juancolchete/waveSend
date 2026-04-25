@@ -14,15 +14,10 @@ export type Network = {
 
 const networks: Network[] = [
   {
-    id: "scroll",
-    name: "Scroll",
-    icon: <Image width="24" height="24" src={"/scroll.png"} alt={"scroll"}/>
-  },
-  {
-    id: "arbitrum",
-    name: "Arbitrum",
-    icon: <Image width="24" height="24" src={"/arbitrum.png"} alt={"scroll"}/>
-  },
+    id: "celo",
+    name: "Celo",
+    icon: <Image width="24" height="24" src={"/celo.png"} alt={"celo"}/>
+  }
 ]
 
 interface NetworkSelectorProps {

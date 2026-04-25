@@ -19,15 +19,15 @@ interface TransactionFormProps {
 }
 
 export default function TransactionForm({ isWalletConnected = false }: TransactionFormProps) {
-  const [chain, setChain] = useState(534351)
+  const [chain, setChain] = useState(42220)
   const [amount, setAmount] = useState("")
   const [receiverWallet, setReceiverWallet] = useState("")
   const [nounce, setNounce] = useState("0")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedNetwork, setSelectedNetwork] = useState<Network>({
-    id: "scroll",
-    name: "Scroll",
-    icon: "/placeholder.svg?height=32&width=32",
+    id: "celo",
+    name: "Celo",
+    icon: "/celo.png?height=32&width=32",
   })
   const { toast } = useToast()
 
@@ -66,7 +66,7 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
       toast({
         variant: "destructive",
         title: "Invalid amount",
-        description: "Please enter a valid WSD amount",
+        description: "Please enter a valid WSND amount",
       })
       return
     }
@@ -105,7 +105,7 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
 
       toast({
         title: "Transaction prepared",
-        description: `${amount} WSD will be sent to ${receiverWallet} on ${selectedNetwork.name} when connection is available. Details copied to clipboard.`,
+        description: `${amount} WSND will be sent to ${receiverWallet} on ${selectedNetwork.name} when connection is available. Details copied to clipboard.`,
       })
 
       // Reset form
@@ -130,7 +130,7 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
           <Send className="h-5 w-5" />
           WaveSend
         </CardTitle>
-        <CardDescription>Send WSD without internet connection</CardDescription>
+        <CardDescription>Send WSND without internet connection</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
@@ -140,7 +140,7 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="amount">Amount (WSD)</Label>
+            <Label htmlFor="amount">Amount (WSND)</Label>
             <div className="relative">
               <Input
                 id="amount"
@@ -154,7 +154,7 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
                 disabled={!isWalletConnected}
               />
               <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-muted-foreground bg-gray-50 dark:bg-gray-900 border-l rounded-r-md">
-                WSD
+                WSND
               </div>
             </div>
           </div>
