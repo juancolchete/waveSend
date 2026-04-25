@@ -1,0 +1,6 @@
+{
+  "appId": "xyz.wavesend.wallet",
+  "appName": "wavesend",
+  "webDir": "out",
+  "bundledWebRuntime": false
+}
