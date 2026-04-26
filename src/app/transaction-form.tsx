@@ -125,7 +125,11 @@ export default function TransactionForm({ isWalletConnected = false, connectedTy
     setIsSubmitting(true)
 
     if (connectedType == "MiniPay") {
+      const [account] = await (window as any).ethereum!.request({
+        method: 'eth_requestAccounts'
+      });
       const walletClient = createWalletClient({
+        account,
         chain: celo, // For mainnet
         transport: custom((window as any).ethereum!),
       });
@@ -135,7 +139,7 @@ export default function TransactionForm({ isWalletConnected = false, connectedTy
         transport: http(),
       });
 
-      async function requestTransfer(tokenAddress:any, transferValue:any, tokenDecimals:any, receiverAddress:any) {
+      async function requestTransfer(tokenAddress: any, transferValue: any, tokenDecimals: any, receiverAddress: any) {
         const hash = await walletClient.sendTransaction({
           to: tokenAddress,
           data: encodeFunctionData({
@@ -159,8 +163,8 @@ export default function TransactionForm({ isWalletConnected = false, connectedTy
           // Do something after transaction has failed.
         }
       }
-     const STABLE_TOKEN_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
-     requestTransfer(STABLE_TOKEN_ADDRESS,amount,18,receiverWallet)
+      const STABLE_TOKEN_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
+      requestTransfer(STABLE_TOKEN_ADDRESS, amount, 18, receiverWallet)
     } else {
       try {
         // Simulate processing (replace with actual offline transaction logic)
