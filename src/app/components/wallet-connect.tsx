@@ -21,7 +21,8 @@ import { ethers } from "ethers"
 import axios from "axios"
 import { chains } from "@/constants"
 import QRCode from "react-qr-code";
-
+import { createWalletClient, custom } from "viem";
+import { celo, celoSepolia } from "viem/chains";
 import contracts from "@/contracts.json"
 // Add this to the props interface at the top of the file
 interface WalletConnectProps {
@@ -31,6 +32,8 @@ interface WalletConnectProps {
 // Update the component definition
 export function WalletConnect({ onConnected }: WalletConnectProps) {
   const [address, setAddress] = useState<string | null>(null)
+  const [connectType, setConnectType] = useState<string | null>(null)
+  const [miniPayAddress, setMiniPayAddress] = useState<string | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [privateKey, setPrivateKey] = useState("")
   const [showPrivateKey, setShowPrivateKey] = useState(false)
@@ -62,7 +65,6 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
       const hdNode = new ethers.Wallet(key)
       setAddress(hdNode.address)
       setIsDialogOpen(false)
-      setPrivateKey("")
       onConnected?.(true) // Emit connected status
       toast({
         title: "Wallet Connected",
@@ -76,6 +78,32 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
       })
     }
   }
+
+const connectWithMiniPay = async () => {
+  if (typeof window !== 'undefined' && (window as any).ethereum) {
+    try {
+      const isMiniPay = Boolean((window as any).ethereum.isMiniPay);
+      if (!isMiniPay) {
+        console.warn("Wallet detected, but it does not appear to be MiniPay.");
+      }
+
+      const client = createWalletClient({
+        chain: celo, // Switch to celoSepolia for testing
+        transport: custom((window as any).ethereum),
+      });
+
+      const [address] = await client.request({ method: 'eth_requestAccounts' });
+      setAddress(address)
+      setConnectType("MiniPay")
+      return address;
+      
+    } catch (error) {
+      console.error("User rejected the request or connection failed:", error);
+    }
+  } else {
+    alert("No Web3 wallet detected. Please open this in MiniPay!");
+  }
+};
 
   const disconnectWallet = () => {
     setAddress(null)
@@ -133,7 +161,7 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
   const genQR = () => {
     if (address) {
       setIsModalOpen(true); // Open the modal
-      
+
       navigator.clipboard.writeText(address);
       toast({
         title: "Address Copied",
@@ -161,9 +189,10 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
               <DialogDescription>Generate a new private key or import an existing one.</DialogDescription>
             </DialogHeader>
             <Tabs defaultValue="generate" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="generate">Generate New</TabsTrigger>
                 <TabsTrigger value="import">Import Key</TabsTrigger>
+                <TabsTrigger value="minipay">MiniPay</TabsTrigger>
               </TabsList>
               <TabsContent value="generate" className="mt-4">
                 <div className="flex flex-col gap-4">
@@ -251,6 +280,14 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
                   </Button>
                 </div>
               </TabsContent>
+              <TabsContent value="minipay" className="mt-4">
+                <div className="flex flex-col gap-4">
+                  {miniPayAddress}    
+                  <Button type="button" onClick={() => connectWithMiniPay()}>
+                    Connect
+                  </Button>
+                </div>
+              </TabsContent>
             </Tabs>
           </DialogContent>
         </Dialog>
@@ -272,10 +309,12 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
             <Copy className="h-4 w-4" />
             Copy Address
           </DropdownMenuItem>
+          {privateKey &&
           <DropdownMenuItem onClick={copyPVK} className="gap-2 cursor-pointer">
             <Copy className="h-4 w-4" />
-            Copy Private Key
+            Copy Private Key 
           </DropdownMenuItem>
+          }
           <DropdownMenuItem onClick={genQR} className="gap-2 cursor-pointer">
             <Copy className="h-4 w-4" />
             Gen qrcode
@@ -294,12 +333,12 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
       </Button>
       {isModalOpen && address && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          
+
           {/* Modal Content Box */}
           <div className="relative p-8 bg-white rounded-2xl shadow-xl flex flex-col items-center gap-6 animate-in fade-in zoom-in duration-200">
-            
+
             {/* Close Button (X) */}
-            <button 
+            <button
               onClick={() => setIsModalOpen(false)}
               className="absolute top-3 right-3 text-gray-400 hover:text-gray-800"
               aria-label="Close modal"
@@ -310,12 +349,12 @@ export function WalletConnect({ onConnected }: WalletConnectProps) {
             <h3 className="text-lg font-semibold text-gray-900">Scan to Pay</h3>
 
             <div className="p-2 bg-white rounded-xl border border-gray-100">
-              <QRCode 
-                value={address} 
-                size={250} 
+              <QRCode
+                value={address}
+                size={250}
               />
             </div>
-            
+
             <p className="text-sm text-gray-500 break-all text-center max-w-[250px]">
               {address}
             </p>
