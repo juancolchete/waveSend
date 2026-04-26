@@ -5,6 +5,8 @@
 
 Wave send (Contract WaveSend.sol) is a revolutionary digital wallet that enables blockchain transactions via SMS, making it ideal for areas with unreliable infrastructure, crisis situations, and disasters. Our solution ensures financial access even when the internet is unavailable. Developed on the Scroll network, the project offers a transparent, efficient, and automated platform for those who need to perform offline transactions.
 
+## demo
+[Click here and watch](https://www.youtube.com/watch?v=3aE_eGegpis)
 ## Tech Chart
 
 ```mermaid
