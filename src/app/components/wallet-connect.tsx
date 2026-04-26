@@ -27,13 +27,12 @@ import contracts from "@/contracts.json"
 // Add this to the props interface at the top of the file
 interface WalletConnectProps {
   onConnected?: (connected: boolean) => void
+  onConnectedType?: (connectedType: string) => void
 }
 
 // Update the component definition
-export function WalletConnect({ onConnected }: WalletConnectProps) {
+export function WalletConnect({ onConnected, onConnectedType }: WalletConnectProps) {
   const [address, setAddress] = useState<string | null>(null)
-  const [connectType, setConnectType] = useState<string | null>(null)
-  const [miniPayAddress, setMiniPayAddress] = useState<string | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [privateKey, setPrivateKey] = useState("")
   const [showPrivateKey, setShowPrivateKey] = useState(false)
@@ -94,7 +93,7 @@ const connectWithMiniPay = async () => {
 
       const [address] = await client.request({ method: 'eth_requestAccounts' });
       setAddress(address)
-      setConnectType("MiniPay")
+      onConnectedType?.("MiniPay") // Emit connected status
       return address;
       
     } catch (error) {
@@ -109,6 +108,7 @@ const connectWithMiniPay = async () => {
     setAddress(null)
     setPrivateKey("")
     onConnected?.(false) // Emit disconnected status
+    onConnectedType?.("")
     toast({
       title: "Wallet Disconnected",
       description: "Your wallet has been disconnected",
@@ -282,7 +282,6 @@ const connectWithMiniPay = async () => {
               </TabsContent>
               <TabsContent value="minipay" className="mt-4">
                 <div className="flex flex-col gap-4">
-                  {miniPayAddress}    
                   <Button type="button" onClick={() => connectWithMiniPay()}>
                     Connect
                   </Button>

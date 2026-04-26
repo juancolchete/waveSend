@@ -13,14 +13,22 @@ import { NetworkSelector, type Network } from "./components/network-selector"
 import { getRawErc20, getRawETH } from "@/data"
 import { ethers } from "ethers"
 import { chains } from "@/constants"
+import { getContract, formatEther, createPublicClient, http, parseUnits } from "viem";
+import { celo } from "viem/chains";
+import { stableTokenABI } from "@celo/abis";
+import { createWalletClient, custom, encodeFunctionData } from "viem";
+
+
 
 interface TransactionFormProps {
-  isWalletConnected?: boolean
+  isWalletConnected?: boolean,
+  connectedType?: string
 }
 
-export default function TransactionForm({ isWalletConnected = false }: TransactionFormProps) {
+export default function TransactionForm({ isWalletConnected = false, connectedType = "" }: TransactionFormProps) {
   const [chain, setChain] = useState(42220)
   const [currency, setCurrency] = useState("CELO");
+  const [balUSDm, setBalUSDm] = useState(0);
   const [amount, setAmount] = useState("")
   const [receiverWallet, setReceiverWallet] = useState("")
   const [nounce, setNounce] = useState("0")
@@ -48,12 +56,45 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
         setNounce(sNounce)
       }
     }
-  }, [chain]);
+    if (connectedType == "MiniPay") {
+      setCurrency("USDm")
+      const STABLE_TOKEN_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
+
+      async function checkUSDmBalance() {
+        const publicClient = createPublicClient({
+          chain: celo,
+          transport: http(),
+        });
+        const StableTokenContract = getContract({
+          abi: stableTokenABI,
+          address: STABLE_TOKEN_ADDRESS,
+          client: publicClient,
+        });
+        const client = createWalletClient({
+          chain: celo,
+          transport: custom((window as any).ethereum),
+        });
+        const [address] = await client.request({ method: 'eth_requestAccounts' });
+
+        const balanceInBigNumber = await StableTokenContract.read.balanceOf([
+          address,
+        ]);
+
+        const balanceInEthers = formatEther(balanceInBigNumber);
+
+        setBalUSDm(Number(balanceInEthers));
+      }
+      checkUSDmBalance();
+
+    } else {
+      setCurrency("CELO")
+    }
+  }, [chain, connectedType]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!isWalletConnected) {
+    if (!isWalletConnected && !connectedType) {
       toast({
         variant: "destructive",
         title: "Wallet not connected",
@@ -83,48 +124,88 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
 
     setIsSubmitting(true)
 
-    try {
-      // Simulate processing (replace with actual offline transaction logic)
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      const privateKey = sessionStorage.getItem("pvk")
-      let nounce = sessionStorage.getItem(`nounce${chain}`)
-      if (!nounce) {
-        sessionStorage.setItem(`nounce${chain}`, "0")
-        nounce = sessionStorage.getItem(`nounce${chain}`)
-      }
-      if (privateKey && nounce) {
-        if (currency == "WSND"){
-          getRawErc20(chains[chain].token, ethers.parseEther(amount), receiverWallet, chain, parseInt(nounce), privateKey)
-        }else{
-          getRawETH(chains[chain].token, ethers.parseEther(amount), receiverWallet, chain, parseInt(nounce), privateKey)
+    if (connectedType == "MiniPay") {
+      const walletClient = createWalletClient({
+        chain: celo, // For mainnet
+        transport: custom((window as any).ethereum!),
+      });
+
+      const publicClient = createPublicClient({
+        chain: celo, // For mainnet
+        transport: http(),
+      });
+
+      async function requestTransfer(tokenAddress:any, transferValue:any, tokenDecimals:any, receiverAddress:any) {
+        const hash = await walletClient.sendTransaction({
+          to: tokenAddress,
+          data: encodeFunctionData({
+            abi: stableTokenABI, // Token ABI from @celo/abis
+            functionName: "transfer",
+            args: [
+              receiverAddress,
+              // Different tokens can have different decimals, USDm (18), USDC (6)
+              parseUnits(`${Number(transferValue)}`, tokenDecimals),
+            ],
+          }),
+        } as any);
+
+        const transaction = await publicClient.waitForTransactionReceipt({
+          hash, // Transaction hash that can be used to search transaction on the explorer.
+        });
+
+        if (transaction.status === "success") {
+          // Do something after transaction is successful.
+        } else {
+          // Do something after transaction has failed.
         }
-        sessionStorage.setItem(`nounce${chain}`, `${parseInt(nounce) + 1}`)
-        setNounce(`${parseInt(nounce) + 1}`)
       }
-      const txnRawEnc = sessionStorage.getItem("txnRawEnc")
-      // Create transaction message
-      const transactionMessage = `${txnRawEnc}`
+     const STABLE_TOKEN_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
+     requestTransfer(STABLE_TOKEN_ADDRESS,amount,18,receiverWallet)
+    } else {
+      try {
+        // Simulate processing (replace with actual offline transaction logic)
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        const privateKey = sessionStorage.getItem("pvk")
+        let nounce = sessionStorage.getItem(`nounce${chain}`)
+        if (!nounce) {
+          sessionStorage.setItem(`nounce${chain}`, "0")
+          nounce = sessionStorage.getItem(`nounce${chain}`)
+        }
+        if (privateKey && nounce) {
+          if (currency == "WSND") {
+            getRawErc20(chains[chain].token, ethers.parseEther(amount), receiverWallet, chain, parseInt(nounce), privateKey)
+          } else {
+            getRawETH(chains[chain].token, ethers.parseEther(amount), receiverWallet, chain, parseInt(nounce), privateKey)
+          }
+          sessionStorage.setItem(`nounce${chain}`, `${parseInt(nounce) + 1}`)
+          setNounce(`${parseInt(nounce) + 1}`)
+        }
+        const txnRawEnc = sessionStorage.getItem("txnRawEnc")
+        // Create transaction message
+        const transactionMessage = `${txnRawEnc}`
 
-      // Copy to clipboard
-      await navigator.clipboard.writeText(transactionMessage)
+        // Copy to clipboard
+        await navigator.clipboard.writeText(transactionMessage)
 
-      toast({
-        title: "Transaction prepared",
-        description: `${amount} WSND will be sent to ${receiverWallet} on ${selectedNetwork.name} when connection is available. Details copied to clipboard.`,
-      })
+        toast({
+          title: "Transaction prepared",
+          description: `${amount} WSND will be sent to ${receiverWallet} on ${selectedNetwork.name} when connection is available. Details copied to clipboard.`,
+        })
 
-      // Reset form
-      setAmount("")
-      setReceiverWallet("")
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Transaction failed",
-        description: "There was an error preparing your transaction.",
-      })
-      console.error("Transaction error:", err)
-    } finally {
-      setIsSubmitting(false)
+        // Reset form
+        setAmount("")
+        setReceiverWallet("")
+      } catch (err) {
+        toast({
+          variant: "destructive",
+          title: "Transaction failed",
+          description: "There was an error preparing your transaction.",
+        })
+        console.error("Transaction error:", err)
+      } finally {
+        setIsSubmitting(false)
+      }
+
     }
   }
 
@@ -133,9 +214,13 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
           <Send className="h-5 w-5" />
-          WaveSend
+          WaveSend {connectedType}
         </CardTitle>
-        <CardDescription>Send WSND without internet connection</CardDescription>
+        {
+          connectedType == "MiniPay" ?
+            (<CardDescription>Send stablecoins with almost no internet pay fees with USDm</CardDescription>) :
+            (<CardDescription>Send WSND without internet connection</CardDescription>)
+        }
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
@@ -143,7 +228,11 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
             <Label>Network</Label>
             <NetworkSelector onNetworkChange={handleNetworkChange} />
           </div>
-
+          {connectedType == "MiniPay" &&
+            <div className="space-y-2">
+              USDm bal: {balUSDm}
+            </div>
+          }
           <div className="space-y-2">
             <Label htmlFor="amount">Amount</Label>
             <div className="relative">
@@ -156,17 +245,19 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="pr-16 bg-white dark:bg-gray-950"
-                disabled={!isWalletConnected}
+                disabled={!isWalletConnected && !connectedType}
               />
               <div className="relative">
-                <select
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground bg-gray-50 dark:bg-gray-900 border-l border-y-0 border-r-0 rounded-r-md cursor-pointer outline-none focus:ring-0"
-                >
-                  <option value="CELO">CELO</option>
-                  <option value="WSND">WSND</option>
-                </select>
+                {connectedType == "" &&
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground bg-gray-50 dark:bg-gray-900 border-l border-y-0 border-r-0 rounded-r-md cursor-pointer outline-none focus:ring-0"
+                  >
+                    <option value="CELO">CELO</option>
+                    <option value="WSND">WSND</option>
+                  </select>
+                }
                 <p className="mt-12 text-sm">You have selected to pay in: {currency}</p>
               </div>
             </div>
@@ -180,34 +271,35 @@ export default function TransactionForm({ isWalletConnected = false }: Transacti
                 value={receiverWallet}
                 onChange={(e) => setReceiverWallet(e.target.value)}
                 className="pl-10 bg-white dark:bg-gray-950"
-                disabled={!isWalletConnected}
+                disabled={!isWalletConnected && !connectedType}
               />
               <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="wallet">Nounce</Label>
-            <div className="relative">
-              <Input
-                id="wallet"
-                type="number"
-                placeholder="Enter wallet address"
-                value={nounce}
-                onChange={(e) => handleSetNounce(e.target.value)}
-                className="bg-white dark:bg-gray-950"
-                disabled={!isWalletConnected}
-              />
-            </div>
-          </div>
+          {connectedType == "" &&
+            <div className="space-y-2">
+              <Label htmlFor="wallet">Nounce</Label>
+              <div className="relative">
+                <Input
+                  id="wallet"
+                  type="number"
+                  placeholder="Enter wallet address"
+                  value={nounce}
+                  onChange={(e) => handleSetNounce(e.target.value)}
+                  className="bg-white dark:bg-gray-950"
+                  disabled={!isWalletConnected}
+                />
+              </div>
+            </div>}
         </CardContent>
         <CardFooter>
           <Button
             type="submit"
             className="w-full bg-black hover:bg-gray-800 text-white"
-            disabled={isSubmitting || !isWalletConnected}
+            disabled={isSubmitting || !isWalletConnected && !connectedType}
             size="lg"
           >
-            {isSubmitting ? "Processing..." : !isWalletConnected ? "Connect Wallet to Send" : "Send Transaction"}
+            {isSubmitting ? "Processing..." : !isWalletConnected && !connectedType ? "Connect Wallet to Send" : "Send Transaction"}
           </Button>
         </CardFooter>
       </form>
