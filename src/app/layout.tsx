@@ -25,6 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <link rel="icon" href="/wavesendlogo.png" sizes="any" />
+      <meta name="talentapp:project_verification" content="0ba5dcd141bae68d28f3018ac27fc3dc503c1ee175a13713047efbe7cc8835533c9dd9e1dabb7ecaf99f23dc02852257463c829e9146bc82934616a12cce2028" />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
