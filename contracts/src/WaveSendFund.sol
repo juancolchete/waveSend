@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.30;
 
 // =============================================================
 //                        INTERFACES
@@ -49,7 +49,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 // =============================================================
 
 /**
- * @title  WavesendFund
+ * @title  WaveSendFund
  * @author Senior Smart Contract Developer
  * @notice A UUPS-upgradeable DeFi Mining Pool on Celo Mainnet operated by Wavesend.
  *
@@ -72,7 +72,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
  *           WBTC  — 8  decimals  (Celo bridged WBTC)
  *           WSND  — 18 decimals  (Wave Send Token)
  */
-contract WavesendFund is
+contract WaveSendFund is
     Initializable,
     UUPSUpgradeable,
     OwnableUpgradeable,
