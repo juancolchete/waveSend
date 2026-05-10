@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.30;
 
-import "forge-std/Test.sol";
-import "forge-std/console.sol";
+import {Test} from "forge-std/Test.sol";
+import {console} from "forge-std/console.sol";
 
 // ── OpenZeppelin proxy utilities ───────────────────────────────────────────────
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 // ── Contract under test ────────────────────────────────────────────────────────
-import "../src/WavesendFund.sol";
+import {WaveSendFund} from "../src/WaveSendFund.sol";
 
 // =============================================================================
 //                          MOCK TOKENS
@@ -89,7 +89,7 @@ contract MockSwapRouter {
         payable
         returns (uint256 amountOut)
     {
-        // Pull tokenIn from the caller (the WavesendFund contract).
+        // Pull tokenIn from the caller (the WaveSendFund contract).
         MockERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
 
         // Verify slippage guard.
@@ -108,11 +108,11 @@ contract MockSwapRouter {
 
 /// @dev Attempts re-entry on claim().
 contract ReentrancyAttacker {
-    WavesendFund public fund;
+    WaveSendFund public fund;
     uint256 public attackCount;
 
     constructor(address _fund) {
-        fund = WavesendFund(_fund);
+        fund = WaveSendFund(_fund);
     }
 
     // Fallback triggered when WBTC/WSND is transferred to this address.
@@ -130,7 +130,7 @@ contract ReentrancyAttacker {
 //                           BASE TEST FIXTURE
 // =============================================================================
 
-abstract contract WavesendFundBase is Test {
+abstract contract WaveSendFundBase is Test {
     // ── Actors ─────────────────────────────────────────────────────────────────
     address internal owner   = makeAddr("owner");
     address internal alice   = makeAddr("alice");
@@ -144,7 +144,7 @@ abstract contract WavesendFundBase is Test {
 
     // ── Infrastructure ─────────────────────────────────────────────────────────
     MockSwapRouter   internal router;
-    WavesendFund     internal fund;    // proxy
+    WaveSendFund     internal fund;    // proxy
 
     // ── Constants mirrored from contract ───────────────────────────────────────
     uint256 internal constant PERIOD      = 2_592_000;   // 30 days
@@ -166,14 +166,14 @@ abstract contract WavesendFundBase is Test {
         // Deploy mock router.
         router = new MockSwapRouter(address(wbtcToken));
 
-        // Deploy WavesendFund behind a UUPS proxy.
-        WavesendFund impl = new WavesendFund();
+        // Deploy WaveSendFund behind a UUPS proxy.
+        WaveSendFund impl = new WaveSendFund();
         bytes memory initData = abi.encodeCall(
-            WavesendFund.initialize,
+            WaveSendFund.initialize,
             (owner, address(usdtToken), address(wbtcToken), address(wsndToken), address(router), POOL_FEE)
         );
         ERC1967Proxy proxy = new ERC1967Proxy(address(impl), initData);
-        fund = WavesendFund(address(proxy));
+        fund = WaveSendFund(address(proxy));
 
         // Seed WSND and WBTC reserves in the pool (company pre-fund).
         wsndToken.mint(address(fund), WSND_LARGE);
@@ -221,7 +221,7 @@ abstract contract WavesendFundBase is Test {
 //  SECTION 1 – INITIALIZER
 // =============================================================================
 
-contract WavesendFund_Initialize is WavesendFundBase {
+contract WaveSendFund_Initialize is WaveSendFundBase {
 
     function test_initialize_setsTokenAddresses() public view {
         assertEq(address(fund.usdt()), address(usdtToken));
@@ -248,9 +248,9 @@ contract WavesendFund_Initialize is WavesendFundBase {
     }
 
     function test_initialize_revertsZeroOwner() public {
-        WavesendFund impl2 = new WavesendFund();
+        WaveSendFund impl2 = new WaveSendFund();
         bytes memory data = abi.encodeCall(
-            WavesendFund.initialize,
+            WaveSendFund.initialize,
             (address(0), address(usdtToken), address(wbtcToken),
              address(wsndToken), address(router), POOL_FEE)
         );
@@ -259,9 +259,9 @@ contract WavesendFund_Initialize is WavesendFundBase {
     }
 
     function test_initialize_revertsZeroUsdt() public {
-        WavesendFund impl2 = new WavesendFund();
+        WaveSendFund impl2 = new WaveSendFund();
         bytes memory data = abi.encodeCall(
-            WavesendFund.initialize,
+            WaveSendFund.initialize,
             (owner, address(0), address(wbtcToken),
              address(wsndToken), address(router), POOL_FEE)
         );
@@ -274,7 +274,7 @@ contract WavesendFund_Initialize is WavesendFundBase {
 //  SECTION 2 – ADMIN SETTERS
 // =============================================================================
 
-contract WavesendFund_AdminSetters is WavesendFundBase {
+contract WaveSendFund_AdminSetters is WaveSendFundBase {
 
     function test_setWsndPerWbtc_updatesRatio() public {
         vm.prank(owner);
@@ -285,7 +285,7 @@ contract WavesendFund_AdminSetters is WavesendFundBase {
     function test_setWsndPerWbtc_emitsEvent() public {
         vm.prank(owner);
         vm.expectEmit(false, false, false, true);
-        emit WavesendFund.WsndRatioUpdated(2e18);
+        emit WaveSendFund.WsndRatioUpdated(2e18);
         fund.setWsndPerWbtc(2e18);
     }
 
@@ -337,7 +337,7 @@ contract WavesendFund_AdminSetters is WavesendFundBase {
 //  SECTION 3 – DEPOSIT (user)
 // =============================================================================
 
-contract WavesendFund_Deposit is WavesendFundBase {
+contract WaveSendFund_Deposit is WaveSendFundBase {
 
     function test_deposit_creditsHashrate() public {
         _deposit(alice);
@@ -366,7 +366,7 @@ contract WavesendFund_Deposit is WavesendFundBase {
     function test_deposit_emitsEvent() public {
         vm.prank(alice);
         vm.expectEmit(true, false, false, true);
-        emit WavesendFund.UserDeposited(alice, USDT_1K, WBTC_1);
+        emit WaveSendFund.UserDeposited(alice, USDT_1K, WBTC_1);
         fund.deposit(USDT_1K, 1);
     }
 
@@ -424,7 +424,7 @@ contract WavesendFund_Deposit is WavesendFundBase {
 //  SECTION 4 – WITHDRAW (user)
 // =============================================================================
 
-contract WavesendFund_Withdraw is WavesendFundBase {
+contract WaveSendFund_Withdraw is WaveSendFundBase {
 
     function setUp() public override {
         super.setUp();
@@ -454,7 +454,7 @@ contract WavesendFund_Withdraw is WavesendFundBase {
     function test_withdraw_emitsEvent() public {
         vm.prank(alice);
         vm.expectEmit(true, false, false, true);
-        emit WavesendFund.UserWithdrawn(alice, WBTC_1);
+        emit WaveSendFund.UserWithdrawn(alice, WBTC_1);
         fund.withdraw(WBTC_1);
     }
 
@@ -490,7 +490,7 @@ contract WavesendFund_Withdraw is WavesendFundBase {
 //  SECTION 5 – YIELD ACCRUAL
 // =============================================================================
 
-contract WavesendFund_YieldAccrual is WavesendFundBase {
+contract WaveSendFund_YieldAccrual is WaveSendFundBase {
 
     function setUp() public override {
         super.setUp();
@@ -562,7 +562,7 @@ contract WavesendFund_YieldAccrual is WavesendFundBase {
 //  SECTION 6 – CLAIM (all three branches)
 // =============================================================================
 
-contract WavesendFund_Claim is WavesendFundBase {
+contract WaveSendFund_Claim is WaveSendFundBase {
 
     function setUp() public override {
         super.setUp();
@@ -599,7 +599,7 @@ contract WavesendFund_Claim is WavesendFundBase {
     function test_claim_branchC_emitsEvent() public {
         vm.prank(alice);
         vm.expectEmit(true, false, false, false);
-        emit WavesendFund.RewardClaimed(alice, 0, 0, false);
+        emit WaveSendFund.RewardClaimed(alice, 0, 0, false);
         fund.claim();
     }
 
@@ -659,13 +659,13 @@ contract WavesendFund_Claim is WavesendFundBase {
         // Easiest: manipulate via foundry cheatcode storage write.
         // Instead, we deploy a fresh scenario where reward > pool balance.
         // Re-setup: tiny WBTC reserve, big hashrate yield.
-        WavesendFund impl2 = new WavesendFund();
+        WaveSendFund impl2 = new WaveSendFund();
         bytes memory initData = abi.encodeCall(
-            WavesendFund.initialize,
+            WaveSendFund.initialize,
             (owner, address(usdtToken), address(wbtcToken), address(wsndToken), address(router), POOL_FEE)
         );
         ERC1967Proxy proxy2 = new ERC1967Proxy(address(impl2), initData);
-        WavesendFund fund2 = WavesendFund(address(proxy2));
+        WaveSendFund fund2 = WaveSendFund(address(proxy2));
 
         // Seed the pool with only 1 satoshi of WBTC (cannot cover any real reward).
         wbtcToken.mint(address(fund2), 1);
@@ -702,13 +702,13 @@ contract WavesendFund_Claim is WavesendFundBase {
         // Drain all WSND from pool.
         uint256 wsndBal = wsndToken.balanceOf(address(fund));
         // Use storage slot trick to zero out; simpler: just skip WSND seed in a fresh fund.
-        WavesendFund impl2  = new WavesendFund();
+        WaveSendFund impl2  = new WaveSendFund();
         bytes memory initData = abi.encodeCall(
-            WavesendFund.initialize,
+            WaveSendFund.initialize,
             (owner, address(usdtToken), address(wbtcToken), address(wsndToken), address(router), POOL_FEE)
         );
         ERC1967Proxy proxy2 = new ERC1967Proxy(address(impl2), initData);
-        WavesendFund fund2 = WavesendFund(address(proxy2));
+        WaveSendFund fund2 = WaveSendFund(address(proxy2));
         // No WSND seeded.
 
         usdtToken.mint(alice, USDT_1K);
@@ -736,7 +736,7 @@ contract WavesendFund_Claim is WavesendFundBase {
 //  SECTION 7 – REWARD PREFERENCE
 // =============================================================================
 
-contract WavesendFund_RewardPreference is WavesendFundBase {
+contract WaveSendFund_RewardPreference is WaveSendFundBase {
 
     function test_setRewardPreference_togglesToTrue() public {
         vm.prank(alice);
@@ -757,7 +757,7 @@ contract WavesendFund_RewardPreference is WavesendFundBase {
     function test_setRewardPreference_emitsEvent() public {
         vm.prank(alice);
         vm.expectEmit(true, false, false, true);
-        emit WavesendFund.RewardPreferenceSet(alice, true);
+        emit WaveSendFund.RewardPreferenceSet(alice, true);
         fund.setRewardPreference(true);
     }
 }
@@ -766,7 +766,7 @@ contract WavesendFund_RewardPreference is WavesendFundBase {
 //  SECTION 8 – FUND DEPOSIT (company liquidity)
 // =============================================================================
 
-contract WavesendFund_FundDeposit is WavesendFundBase {
+contract WaveSendFund_FundDeposit is WaveSendFundBase {
 
     function test_fundDeposit_increasesContractBalance() public {
         uint256 depositAmt = 5 * WBTC_1;
@@ -830,7 +830,7 @@ contract WavesendFund_FundDeposit is WavesendFundBase {
 
         vm.prank(owner);
         vm.expectEmit(true, false, true, true);
-        emit WavesendFund.FundDeposited(address(wbtcToken), WBTC_1, owner);
+        emit WaveSendFund.FundDeposited(address(wbtcToken), WBTC_1, owner);
         fund.fundDeposit(address(wbtcToken), WBTC_1);
     }
 
@@ -851,7 +851,7 @@ contract WavesendFund_FundDeposit is WavesendFundBase {
 //  SECTION 9 – OPERATIONAL WITHDRAW (company 10% monthly cap)
 // =============================================================================
 
-contract WavesendFund_OperationalWithdraw is WavesendFundBase {
+contract WaveSendFund_OperationalWithdraw is WaveSendFundBase {
 
     uint256 internal poolWbtc;
 
@@ -899,7 +899,7 @@ contract WavesendFund_OperationalWithdraw is WavesendFundBase {
         uint256 tenPct = poolWbtc / 10;
         vm.prank(owner);
         vm.expectEmit(true, false, false, false);
-        emit WavesendFund.OperationalWithdrawn(address(wbtcToken), tenPct, 0, 0, 0);
+        emit WaveSendFund.OperationalWithdrawn(address(wbtcToken), tenPct, 0, 0, 0);
         fund.operationalWithdraw(address(wbtcToken), tenPct, treasury);
     }
 
@@ -997,7 +997,7 @@ contract WavesendFund_OperationalWithdraw is WavesendFundBase {
 //  SECTION 10 – GET WITHDRAW STATUS (view)
 // =============================================================================
 
-contract WavesendFund_GetWithdrawStatus is WavesendFundBase {
+contract WaveSendFund_GetWithdrawStatus is WaveSendFundBase {
 
     function test_status_beforeAnyWithdraw_returnsFullAllowance() public view {
         uint256 poolBal = wbtcToken.balanceOf(address(fund));
@@ -1042,7 +1042,7 @@ contract WavesendFund_GetWithdrawStatus is WavesendFundBase {
 //  SECTION 11 – FULL LIFECYCLE INTEGRATION
 // =============================================================================
 
-contract WavesendFund_Lifecycle is WavesendFundBase {
+contract WaveSendFund_Lifecycle is WaveSendFundBase {
 
     function test_lifecycle_depositYieldClaimWithdraw() public {
         // 1. Deposit
@@ -1145,7 +1145,7 @@ contract WavesendFund_Lifecycle is WavesendFundBase {
 //  SECTION 12 – REENTRANCY GUARD
 // =============================================================================
 
-contract WavesendFund_Reentrancy is WavesendFundBase {
+contract WaveSendFund_Reentrancy is WaveSendFundBase {
 
     function test_reentrancyGuard_claimIsProtected() public {
         // The nonReentrant modifier means a second call to claim() inside
@@ -1177,7 +1177,7 @@ contract WavesendFund_Reentrancy is WavesendFundBase {
 //  SECTION 13 – FUZZ TESTS
 // =============================================================================
 
-contract WavesendFund_Fuzz is WavesendFundBase {
+contract WaveSendFund_Fuzz is WaveSendFundBase {
 
     function testFuzz_yield_neverExceedsOnePercentPerMonth(uint256 elapsed) public {
         vm.assume(elapsed <= PERIOD * 12);  // cap at 12 months for gas
