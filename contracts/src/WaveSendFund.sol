@@ -42,7 +42,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 // =============================================================
 //                     WAVESEND FUND CONTRACT
@@ -78,28 +78,28 @@ contract WaveSendFund is
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable
 {
-    using SafeERC20Upgradeable for IERC20;
+    using SafeERC20 for IERC20;
 
     // ---------------------------------------------------------
     //                        CONSTANTS
     // ---------------------------------------------------------
 
     /// @dev 30-day yield/operational period in seconds.
-    uint256 public constant PERIOD_30_DAYS  = 2_592_000;
+    uint256 public constant PERIOD_30_DAYS   = 2_592_000;
 
     /// @dev Yield rate: 1 % = 100 / 10_000.
-    uint256 public constant YIELD_RATE_NUM  = 100;
-    uint256 public constant YIELD_RATE_DEN  = 10_000;
+    uint256 public constant YIELD_RATE_NUM   = 100;
+    uint256 public constant YIELD_RATE_DEN   = 10_000;
 
-    /// @dev Maximum company withdrawal per token per 30-day window: 10 % = 10 / 100.
-    uint256 public constant MAX_WITHDRAW_BPS = 1_000;  // basis points (10 %)
+    /// @dev Maximum company withdrawal per token per 30-day window: 10 %.
+    uint256 public constant MAX_WITHDRAW_BPS = 1_000;
     uint256 public constant BPS_DENOM        = 10_000;
 
     /// @dev WBTC unit (8 decimals).
-    uint256 public constant WBTC_UNIT       = 1e8;
+    uint256 public constant WBTC_UNIT        = 1e8;
 
     /// @dev WSND unit (18 decimals).
-    uint256 public constant WSND_UNIT       = 1e18;
+    uint256 public constant WSND_UNIT        = 1e18;
 
     // ---------------------------------------------------------
     //                      STATE VARIABLES
@@ -136,10 +136,6 @@ contract WaveSendFund is
 
     /**
      * @notice Per-token record of the company's rolling 30-day withdrawal window.
-     * @dev    Key: token address.
-     *         `windowStart`       — timestamp when the current window opened.
-     *         `withdrawnInWindow` — cumulative amount already taken in this window.
-     *         `snapshotBalance`   — contract balance at window open (caps the 10 %).
      */
     struct WithdrawWindow {
         uint256 windowStart;
@@ -174,11 +170,7 @@ contract WaveSendFund is
     event UserWithdrawn(address indexed user, uint256 wbtcAmount);
     event RewardClaimed(address indexed user, uint256 wbtcReward, uint256 wsndPaid, bool usedFallback);
     event RewardPreferenceSet(address indexed user, bool prefersWSND);
-
-    /// @notice Emitted when the company adds liquidity via fundDeposit.
     event FundDeposited(address indexed token, uint256 amount, address indexed depositor);
-
-    /// @notice Emitted when the company makes an operational withdrawal.
     event OperationalWithdrawn(
         address indexed token,
         uint256 amount,
@@ -186,7 +178,6 @@ contract WaveSendFund is
         uint256 totalWithdrawnInWindow,
         uint256 allowance
     );
-
     event WsndRatioUpdated(uint256 newWsndPerWbtc);
     event PoolFeeUpdated(uint24 newFee);
     event RouterUpdated(address newRouter);
@@ -237,7 +228,6 @@ contract WaveSendFund is
         swapRouter  = ISwapRouter(_router);
         poolFee     = _poolFee;
 
-        // 1 WBTC (1e8) → 1 WSND (1e18) face-value default
         wsndPerWbtc = WSND_UNIT;
     }
 
@@ -294,16 +284,12 @@ contract WaveSendFund is
     function fundDeposit(address token, uint256 amount) external nonReentrant {
         require(token  != address(0), "WF: zero token");
         require(amount >  0,          "WF: zero amount");
-
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-
         emit FundDeposited(token, amount, msg.sender);
     }
 
     /**
      * @notice Withdraw up to 10 % of any token's contract balance per 30-day rolling window.
-     * @dev    A new window opens automatically once 30 days have elapsed.
-     *         Partial withdrawals accumulate; the sum can never exceed 10 % in one window.
      * @param  token      ERC-20 token to withdraw.
      * @param  amount     Amount to withdraw (token's native decimals).
      * @param  recipient  Address that receives the tokens.
@@ -319,31 +305,23 @@ contract WaveSendFund is
 
         WithdrawWindow storage window = withdrawWindows[token];
 
-        // ── Open or roll the window ──────────────────────────────────────────
         if (
             window.windowStart == 0 ||
             block.timestamp >= window.windowStart + PERIOD_30_DAYS
         ) {
-            window.windowStart        = block.timestamp;
-            window.withdrawnInWindow  = 0;
-            window.snapshotBalance    = IERC20(token).balanceOf(address(this));
+            window.windowStart       = block.timestamp;
+            window.withdrawnInWindow = 0;
+            window.snapshotBalance   = IERC20(token).balanceOf(address(this));
         }
 
-        // ── Compute allowance for this window ────────────────────────────────
-        uint256 windowAllowance = (window.snapshotBalance * MAX_WITHDRAW_BPS) / BPS_DENOM;
-
+        uint256 windowAllowance  = (window.snapshotBalance * MAX_WITHDRAW_BPS) / BPS_DENOM;
         uint256 alreadyWithdrawn = window.withdrawnInWindow;
         require(alreadyWithdrawn < windowAllowance, "WF: monthly allowance exhausted");
 
         uint256 remaining = windowAllowance - alreadyWithdrawn;
         require(amount <= remaining, "WF: exceeds monthly 10% cap");
+        require(IERC20(token).balanceOf(address(this)) >= amount, "WF: insufficient contract balance");
 
-        require(
-            IERC20(token).balanceOf(address(this)) >= amount,
-            "WF: insufficient contract balance"
-        );
-
-        // ── CEI: update state before transfer ────────────────────────────────
         window.withdrawnInWindow += amount;
 
         IERC20(token).safeTransfer(recipient, amount);
@@ -359,12 +337,6 @@ contract WaveSendFund is
 
     /**
      * @notice View the current operational withdrawal status for a given token.
-     * @param  token              ERC-20 token address to query.
-     * @return windowStart        Timestamp when the current 30-day window opened.
-     * @return withdrawnSoFar     Amount already withdrawn in the current window.
-     * @return windowAllowance    Maximum withdrawable in the current window (10 % of snapshot).
-     * @return remainingAllowance How much is still available this window.
-     * @return windowEndsAt       Timestamp when this window closes.
      */
     function getWithdrawStatus(address token)
         external
@@ -390,20 +362,12 @@ contract WaveSendFund is
         if (windowExpired) {
             uint256 currentBal = IERC20(token).balanceOf(address(this));
             uint256 allowance  = (currentBal * MAX_WITHDRAW_BPS) / BPS_DENOM;
-            return (
-                block.timestamp,
-                0,
-                allowance,
-                allowance,
-                block.timestamp + PERIOD_30_DAYS
-            );
+            return (block.timestamp, 0, allowance, allowance, block.timestamp + PERIOD_30_DAYS);
         }
 
         windowAllowance    = (window.snapshotBalance * MAX_WITHDRAW_BPS) / BPS_DENOM;
         withdrawnSoFar     = window.withdrawnInWindow;
-        remainingAllowance = windowAllowance > withdrawnSoFar
-                            ? windowAllowance - withdrawnSoFar
-                            : 0;
+        remainingAllowance = windowAllowance > withdrawnSoFar ? windowAllowance - withdrawnSoFar : 0;
         return (
             window.windowStart,
             withdrawnSoFar,
@@ -439,7 +403,6 @@ contract WaveSendFund is
         _updateYield(msg.sender);
 
         usdt.safeTransferFrom(msg.sender, address(this), usdtAmount);
-
         usdt.safeApprove(address(swapRouter), usdtAmount);
 
         uint256 wbtcReceived = swapRouter.exactInputSingle(
@@ -557,10 +520,6 @@ contract WaveSendFund is
     //                     INTERNAL HELPERS
     // ---------------------------------------------------------
 
-    /**
-     * @dev Linearly calculate yield accrued since `lastUpdateTimestamp`.
-     *      Formula: (activeHashrate × 100 × timeElapsed) / (10_000 × 2_592_000)
-     */
     function _calculateYield(uint256 activeHashrate, uint256 lastUpdateTimestamp)
         internal
         view
@@ -568,36 +527,20 @@ contract WaveSendFund is
     {
         if (activeHashrate == 0 || lastUpdateTimestamp == 0) return 0;
         if (block.timestamp <= lastUpdateTimestamp)           return 0;
-
         uint256 timeElapsed = block.timestamp - lastUpdateTimestamp;
         accrued = (activeHashrate * YIELD_RATE_NUM * timeElapsed)
                   / (YIELD_RATE_DEN * PERIOD_30_DAYS);
     }
 
-    /**
-     * @dev Snapshot accrued yield into `pendingRewards` and reset the timestamp.
-     *      Must be called at the start of every state-mutating user action.
-     */
     function _updateYield(address account) internal {
         UserInfo storage user = userInfo[account];
-
         if (user.activeHashrate > 0 && user.lastUpdateTimestamp > 0) {
-            uint256 accrued = _calculateYield(
-                user.activeHashrate,
-                user.lastUpdateTimestamp
-            );
-            if (accrued > 0) {
-                user.pendingRewards += accrued;
-            }
+            uint256 accrued = _calculateYield(user.activeHashrate, user.lastUpdateTimestamp);
+            if (accrued > 0) user.pendingRewards += accrued;
         }
-
         user.lastUpdateTimestamp = block.timestamp;
     }
 
-    /**
-     * @dev Convert a WBTC amount (8 dec) to its WSND equivalent (18 dec).
-     *      wsndAmount = wbtcAmount × wsndPerWbtc / WBTC_UNIT
-     */
     function _wbtcToWsnd(uint256 wbtcAmount) internal view returns (uint256) {
         return (wbtcAmount * wsndPerWbtc) / WBTC_UNIT;
     }
