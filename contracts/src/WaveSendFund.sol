@@ -137,7 +137,7 @@ contract WaveSendFund is
     /**
      * @notice Per-token record of the company's rolling 30-day withdrawal window.
      * @dev    Key: token address.
-     *         `windowStart`   — timestamp when the current window opened.
+     *         `windowStart`       — timestamp when the current window opened.
      *         `withdrawnInWindow` — cumulative amount already taken in this window.
      *         `snapshotBalance`   — contract balance at window open (caps the 10 %).
      */
@@ -255,7 +255,6 @@ contract WaveSendFund is
     /**
      * @notice Update the WSND : WBTC face-value ratio used when paying yield in WSND.
      * @param  _wsndPerWbtc  WSND units (18 dec) equal to 1 WBTC unit (1e8).
-     *                       Example: pass 1.5e18 for 1.5 WSND per 1 WBTC.
      */
     function setWsndPerWbtc(uint256 _wsndPerWbtc) external onlyOwner {
         require(_wsndPerWbtc > 0, "WF: ratio zero");
@@ -288,10 +287,7 @@ contract WaveSendFund is
 
     /**
      * @notice Deposit any ERC-20 token into the fund as company liquidity.
-     * @dev    This is a pure liquidity top-up — no yield is accrued for the company.
-     *         Typically used to pre-fund WBTC reward reserves or add WSND fallback reserves.
-     *         Any address may call this (e.g. a treasury multi-sig), not just the owner,
-     *         allowing flexible operational flows.
+     * @dev    Pure liquidity top-up — no yield is accrued for the depositor.
      * @param  token   Address of the ERC-20 token to deposit.
      * @param  amount  Amount to deposit (in the token's native decimals).
      */
@@ -306,17 +302,11 @@ contract WaveSendFund is
 
     /**
      * @notice Withdraw up to 10 % of any token's contract balance per 30-day rolling window.
-     * @dev    Enforces a hard on-chain cap:
-     *           allowance = 10 % of the balance snapshotted at the start of the current window.
-     *         A new window opens automatically once 30 days have elapsed from `windowStart`.
-     *         Partial withdrawals within a window accumulate; remaining allowance is checked
-     *         against each call so the sum can never exceed 10 % in any single window.
-     *
-     *         Only callable by the contract owner (company wallet / multi-sig).
-     *
+     * @dev    A new window opens automatically once 30 days have elapsed.
+     *         Partial withdrawals accumulate; the sum can never exceed 10 % in one window.
      * @param  token      ERC-20 token to withdraw.
      * @param  amount     Amount to withdraw (token's native decimals).
-     * @param  recipient  Address that receives the tokens (e.g. company treasury).
+     * @param  recipient  Address that receives the tokens.
      */
     function operationalWithdraw(
         address token,
@@ -329,19 +319,17 @@ contract WaveSendFund is
 
         WithdrawWindow storage window = withdrawWindows[token];
 
-        // ── Open or roll the window ────────────────────────────────────────
+        // ── Open or roll the window ──────────────────────────────────────────
         if (
             window.windowStart == 0 ||
             block.timestamp >= window.windowStart + PERIOD_30_DAYS
         ) {
-            // Start a fresh 30-day window; snapshot current balance as the cap base.
             window.windowStart        = block.timestamp;
             window.withdrawnInWindow  = 0;
             window.snapshotBalance    = IERC20(token).balanceOf(address(this));
         }
 
-        // ── Compute allowance for this window ─────────────────────────────
-        // allowance = 10 % of the balance at window open.
+        // ── Compute allowance for this window ────────────────────────────────
         uint256 windowAllowance = (window.snapshotBalance * MAX_WITHDRAW_BPS) / BPS_DENOM;
 
         uint256 alreadyWithdrawn = window.withdrawnInWindow;
@@ -350,13 +338,12 @@ contract WaveSendFund is
         uint256 remaining = windowAllowance - alreadyWithdrawn;
         require(amount <= remaining, "WF: exceeds monthly 10% cap");
 
-        // ── Sanity: ensure the contract actually holds enough ──────────────
         require(
             IERC20(token).balanceOf(address(this)) >= amount,
             "WF: insufficient contract balance"
         );
 
-        // ── Update state before transfer (CEI pattern) ────────────────────
+        // ── CEI: update state before transfer ────────────────────────────────
         window.withdrawnInWindow += amount;
 
         IERC20(token).safeTransfer(recipient, amount);
@@ -372,12 +359,12 @@ contract WaveSendFund is
 
     /**
      * @notice View the current operational withdrawal status for a given token.
-     * @param  token            ERC-20 token address to query.
-     * @return windowStart      Timestamp when the current 30-day window opened (0 = not yet opened).
-     * @return withdrawnSoFar   Amount already withdrawn in the current window.
-     * @return windowAllowance  Maximum withdrawable in the current window (10 % of snapshot).
-     * @return remainingAllowance  How much is still available this window.
-     * @return windowEndsAt     Timestamp when this window closes and a new one can open.
+     * @param  token              ERC-20 token address to query.
+     * @return windowStart        Timestamp when the current 30-day window opened.
+     * @return withdrawnSoFar     Amount already withdrawn in the current window.
+     * @return windowAllowance    Maximum withdrawable in the current window (10 % of snapshot).
+     * @return remainingAllowance How much is still available this window.
+     * @return windowEndsAt       Timestamp when this window closes.
      */
     function getWithdrawStatus(address token)
         external
@@ -392,7 +379,6 @@ contract WaveSendFund is
     {
         WithdrawWindow storage window = withdrawWindows[token];
 
-        // If no window exists yet, simulate the first window using current balance.
         if (window.windowStart == 0) {
             uint256 currentBal = IERC20(token).balanceOf(address(this));
             uint256 allowance  = (currentBal * MAX_WITHDRAW_BPS) / BPS_DENOM;
@@ -402,7 +388,6 @@ contract WaveSendFund is
         bool windowExpired = block.timestamp >= window.windowStart + PERIOD_30_DAYS;
 
         if (windowExpired) {
-            // A fresh window would be opened on the next call; preview it.
             uint256 currentBal = IERC20(token).balanceOf(address(this));
             uint256 allowance  = (currentBal * MAX_WITHDRAW_BPS) / BPS_DENOM;
             return (
@@ -414,8 +399,8 @@ contract WaveSendFund is
             );
         }
 
-        windowAllowance   = (window.snapshotBalance * MAX_WITHDRAW_BPS) / BPS_DENOM;
-        withdrawnSoFar    = window.withdrawnInWindow;
+        windowAllowance    = (window.snapshotBalance * MAX_WITHDRAW_BPS) / BPS_DENOM;
+        withdrawnSoFar     = window.withdrawnInWindow;
         remainingAllowance = windowAllowance > withdrawnSoFar
                             ? windowAllowance - withdrawnSoFar
                             : 0;
@@ -451,13 +436,10 @@ contract WaveSendFund is
         require(usdtAmount > 0, "WF: zero USDT");
         require(minWbtcOut > 0, "WF: zero min out");
 
-        // 1. Sync pending yield before mutating state
         _updateYield(msg.sender);
 
-        // 2. Pull USDT from user
         usdt.safeTransferFrom(msg.sender, address(this), usdtAmount);
 
-        // 3. Approve router and execute swap USDT → WBTC
         usdt.safeApprove(address(swapRouter), usdtAmount);
 
         uint256 wbtcReceived = swapRouter.exactInputSingle(
@@ -473,7 +455,6 @@ contract WaveSendFund is
             })
         );
 
-        // 4. Credit WBTC as Hashrate and reset accrual timestamp
         UserInfo storage user = userInfo[msg.sender];
         user.activeHashrate      += wbtcReceived;
         user.totalDeposited      += wbtcReceived;
@@ -494,8 +475,8 @@ contract WaveSendFund is
         _updateYield(msg.sender);
 
         UserInfo storage user = userInfo[msg.sender];
-        require(user.activeHashrate >= wbtcAmount,              "WF: insufficient hashrate");
-        require(wbtc.balanceOf(address(this)) >= wbtcAmount,   "WF: pool low WBTC");
+        require(user.activeHashrate >= wbtcAmount,            "WF: insufficient hashrate");
+        require(wbtc.balanceOf(address(this)) >= wbtcAmount, "WF: pool low WBTC");
 
         user.activeHashrate -= wbtcAmount;
         totalPoolHashrate   -= wbtcAmount;
@@ -509,7 +490,7 @@ contract WaveSendFund is
      * @notice Claim all accrued yield.
      *
      *         Priority tree:
-     *         A) `prefersWSND == true`                        → pay full reward in WSND.
+     *         A) `prefersWSND == true`                         → pay full reward in WSND.
      *         B) `prefersWSND == false` AND pool WBTC < reward → full fallback to WSND.
      *         C) `prefersWSND == false` AND pool WBTC ≥ reward → pay in WBTC.
      */
@@ -520,13 +501,11 @@ contract WaveSendFund is
         uint256 rewards = user.pendingRewards;
         require(rewards > 0, "WF: nothing to claim");
 
-        // CEI: zero out rewards before any external call
         user.pendingRewards = 0;
 
         bool    usedFallback;
         uint256 wsndPaid;
 
-        // ── A: User prefers WSND ──────────────────────────────────────────
         if (user.prefersWSND) {
             wsndPaid = _wbtcToWsnd(rewards);
             require(wsnd.balanceOf(address(this)) >= wsndPaid, "WF: insufficient WSND");
@@ -534,7 +513,6 @@ contract WaveSendFund is
             wsnd.safeTransfer(msg.sender, wsndPaid);
             usedFallback = false;
 
-        // ── B: Prefers WBTC but pool is short → full WSND fallback ────────
         } else if (wbtc.balanceOf(address(this)) < rewards) {
             wsndPaid = _wbtcToWsnd(rewards);
             require(wsnd.balanceOf(address(this)) >= wsndPaid, "WF: insufficient WSND fallback");
@@ -542,7 +520,6 @@ contract WaveSendFund is
             wsnd.safeTransfer(msg.sender, wsndPaid);
             usedFallback = true;
 
-        // ── C: Prefers WBTC and pool has enough ───────────────────────────
         } else {
             user.totalWbtcClaimed += rewards;
             wbtc.safeTransfer(msg.sender, rewards);
@@ -620,7 +597,6 @@ contract WaveSendFund is
     /**
      * @dev Convert a WBTC amount (8 dec) to its WSND equivalent (18 dec).
      *      wsndAmount = wbtcAmount × wsndPerWbtc / WBTC_UNIT
-     *      At the default ratio (wsndPerWbtc = 1e18): wsndAmount = wbtcAmount × 1e10.
      */
     function _wbtcToWsnd(uint256 wbtcAmount) internal view returns (uint256) {
         return (wbtcAmount * wsndPerWbtc) / WBTC_UNIT;
