@@ -63,6 +63,12 @@ contract MockERC20 is Test {
         emit Transfer(address(0), to, amount);
     }
 
+    function burn(address from, uint256 amount) external {
+        balanceOf[from] -= amount;
+        totalSupply      -= amount;
+        emit Transfer(from, address(0), amount);
+    }
+
     function approve(address spender, uint256 amount) external returns (bool) {
         allowance[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
@@ -155,9 +161,9 @@ contract ReentrancyAttacker {
 
 abstract contract WaveSendFundBase is Test {
     // ── Actors ─────────────────────────────────────────────────────────────────
-    address internal owner   = makeAddr("owner");
-    address internal alice   = makeAddr("alice");
-    address internal bob     = makeAddr("bob");
+    address internal owner    = makeAddr("owner");
+    address internal alice    = makeAddr("alice");
+    address internal bob      = makeAddr("bob");
     address internal treasury = makeAddr("treasury");
 
     // ── Tokens ─────────────────────────────────────────────────────────────────
@@ -660,13 +666,9 @@ contract WaveSendFund_Claim is WaveSendFundBase {
         vm.prank(alice);
         fund2.deposit(USDT_1K, 1);
 
-        // Zero out fund2's WBTC balance via vm.store so pool WBTC < any reward.
-        // MockERC20.balanceOf is mapping(address=>uint256) at slot 0.
-        vm.store(
-            address(wbtcToken),
-            keccak256(abi.encode(address(fund2), uint256(0))),
-            bytes32(0)
-        );
+        // Burn all WBTC from fund2 so pool WBTC == 0 < any reward (branch B fires).
+        uint256 fund2WbtcBal = wbtcToken.balanceOf(address(fund2));
+        wbtcToken.burn(address(fund2), fund2WbtcBal);
 
         _skip(PERIOD);
 
@@ -987,7 +989,7 @@ contract WaveSendFund_GetWithdrawStatus is WaveSendFundBase {
         vm.prank(owner);
         fund.operationalWithdraw(address(wbtcToken), poolBal / 10, treasury);
         _skip(PERIOD + 1);
-        uint256 newBal = wbtcToken.balanceOf(address(fund));
+        uint256 newBal  = wbtcToken.balanceOf(address(fund));
         (,, uint256 allowance, uint256 remaining,) = fund.getWithdrawStatus(address(wbtcToken));
         assertEq(allowance, newBal / 10);
         assertEq(remaining, newBal / 10);
