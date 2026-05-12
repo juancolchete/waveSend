@@ -23,13 +23,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
-          cache: 'pnpm' # Now correctly looks for pnpm-lock.yaml
+          cache: 'pnpm'
 
       - name: Install Dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Swap Next.js Config for Mobile Export
-        # Overwrites your local 'standalone' config with the mobile 'export' config
+      - name: Swap Next.js Config
         run: cp next.config.mobile.ts next.config.ts
 
       - name: Build Next.js Static Export
@@ -51,13 +50,10 @@ jobs:
           if [ ! -d "android" ]; then
             pnpm exec cap add android
           fi
-          
           mkdir -p assets
           cp public/wavesendlogo.png assets/icon.png
           cp public/wavesendlogo.png assets/splash.png 
-          
           npx @capacitor/assets generate --android
-          
           pnpm exec cap sync android
 
       - name: Build APK (Debug)
