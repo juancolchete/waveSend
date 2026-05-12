@@ -5,16 +5,6 @@ pragma solidity ^0.8.30;
 //                        INTERFACES
 // =============================================================
 
-/// @notice Minimal ERC20 interface (OpenZeppelin SafeERC20 compatible).
-interface IERC20 {
-    function totalSupply() external view returns (uint256);
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address to, uint256 amount) external returns (bool);
-    function allowance(address owner, address spender) external view returns (uint256);
-    function approve(address spender, uint256 amount) external returns (bool);
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
-}
-
 /// @notice Uniswap V3 SwapRouter interface – exactInputSingle only.
 interface ISwapRouter {
     struct ExactInputSingleParams {
@@ -27,22 +17,20 @@ interface ISwapRouter {
         uint256 amountOutMinimum;
         uint160 sqrtPriceLimitX96;
     }
-
     function exactInputSingle(ExactInputSingleParams calldata params)
-        external
-        payable
-        returns (uint256 amountOut);
+        external payable returns (uint256 amountOut);
 }
 
 // =============================================================
-//               OpenZeppelin UUPS Upgradeable imports
+//               OpenZeppelin imports
 // =============================================================
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // =============================================================
 //                     WAVESEND FUND CONTRACT
@@ -53,30 +41,25 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
  * @author Senior Smart Contract Developer
  * @notice A UUPS-upgradeable DeFi Mining Pool on Celo Mainnet operated by Wavesend.
  *
- *         ┌─ User Flow ──────────────────────────────────────────────────┐
- *         │  deposit(usdt, minWbtcOut) → swap USDT→WBTC → earn hashrate  │
- *         │  claim()                  → receive yield in WBTC or WSND    │
- *         │  withdraw(wbtcAmount)     → reclaim principal                 │
- *         └──────────────────────────────────────────────────────────────┘
- *
- *         ┌─ Company Flow ───────────────────────────────────────────────┐
- *         │  fundDeposit(token, amt)  → add liquidity, no yield accrual  │
- *         │  operationalWithdraw(...) → take ≤10 % of any token/month    │
- *         └──────────────────────────────────────────────────────────────┘
- *
- * @dev    Yield formula (linear, per second):
- *           pendingRewards = (activeHashrate × 100 × timeElapsed) / (10_000 × 2_592_000)
+ *         Yield formula (linear, per second):
+ *           pendingRewards = (activeHashrate x 100 x timeElapsed) / (10_000 x 2_592_000)
  *
  *         Decimals:
- *           USDT  — 6  decimals  (Celo bridged USDT)
- *           WBTC  — 8  decimals  (Celo bridged WBTC)
- *           WSND  — 18 decimals  (Wave Send Token)
+ *           USDT  -- 6  decimals  (Celo bridged USDT)
+ *           WBTC  -- 8  decimals  (Celo bridged WBTC)
+ *           WSND  -- 18 decimals  (Wave Send Token)
+ *
+ *         OZ v5 notes:
+ *           - ReentrancyGuard (non-upgradeable) used; safe with UUPS proxies.
+ *           - __UUPSUpgradeable_init() removed in OZ v5 -- not called.
+ *           - safeApprove removed in OZ v5 -- forceApprove used instead.
+ *           - SafeERC20Upgradeable removed in OZ v5 -- SafeERC20 used instead.
  */
 contract WaveSendFund is
     Initializable,
     UUPSUpgradeable,
     OwnableUpgradeable,
-    ReentrancyGuardUpgradeable
+    ReentrancyGuard
 {
     using SafeERC20 for IERC20;
 
@@ -84,59 +67,31 @@ contract WaveSendFund is
     //                        CONSTANTS
     // ---------------------------------------------------------
 
-    /// @dev 30-day yield/operational period in seconds.
     uint256 public constant PERIOD_30_DAYS   = 2_592_000;
-
-    /// @dev Yield rate: 1 % = 100 / 10_000.
     uint256 public constant YIELD_RATE_NUM   = 100;
     uint256 public constant YIELD_RATE_DEN   = 10_000;
-
-    /// @dev Maximum company withdrawal per token per 30-day window: 10 %.
     uint256 public constant MAX_WITHDRAW_BPS = 1_000;
     uint256 public constant BPS_DENOM        = 10_000;
-
-    /// @dev WBTC unit (8 decimals).
     uint256 public constant WBTC_UNIT        = 1e8;
-
-    /// @dev WSND unit (18 decimals).
     uint256 public constant WSND_UNIT        = 1e18;
 
     // ---------------------------------------------------------
     //                      STATE VARIABLES
     // ---------------------------------------------------------
 
-    /// @notice Celo bridged USDT (6 decimals).
-    IERC20  public usdt;
-
-    /// @notice Celo bridged WBTC (8 decimals) — principal & default yield token.
-    IERC20  public wbtc;
-
-    /// @notice Wave Send Token (18 decimals) — fallback yield token.
-    IERC20  public wsnd;
-
-    /// @notice Uniswap V3 SwapRouter on Celo.
+    IERC20      public usdt;
+    IERC20      public wbtc;
+    IERC20      public wsnd;
     ISwapRouter public swapRouter;
 
-    /**
-     * @notice WSND units equivalent to 1 WBTC unit (1e8).
-     * @dev    Default: 1e18 → face-value 1:1 (1 WBTC = 1 WSND).
-     *         Conversion: wsndAmount = wbtcAmount * wsndPerWbtc / WBTC_UNIT
-     */
     uint256 public wsndPerWbtc;
-
-    /// @notice Pool-wide sum of all active user hashrates (WBTC, 8 dec).
     uint256 public totalPoolHashrate;
-
-    /// @notice Uniswap V3 fee tier for USDT→WBTC swaps (e.g. 500 = 0.05 %).
     uint24  public poolFee;
 
     // ---------------------------------------------------------
     //              OPERATIONAL WITHDRAWAL TRACKING
     // ---------------------------------------------------------
 
-    /**
-     * @notice Per-token record of the company's rolling 30-day withdrawal window.
-     */
     struct WithdrawWindow {
         uint256 windowStart;
         uint256 withdrawnInWindow;
@@ -149,15 +104,14 @@ contract WaveSendFund is
     //                        USER DATA
     // ---------------------------------------------------------
 
-    /// @notice Per-user accounting state.
     struct UserInfo {
-        uint256 activeHashrate;       // Current WBTC principal (8 dec)
-        uint256 totalDeposited;       // Lifetime WBTC received after swap (8 dec)
-        uint256 totalWbtcClaimed;     // Lifetime WBTC yield paid (8 dec)
-        uint256 totalWsndClaimed;     // Lifetime WSND yield paid (18 dec)
-        uint256 pendingRewards;       // Accrued WBTC-denominated yield (8 dec)
-        uint256 lastUpdateTimestamp;  // Timestamp of last yield sync
-        bool    prefersWSND;          // true → pay in WSND; false → WBTC (with fallback)
+        uint256 activeHashrate;
+        uint256 totalDeposited;
+        uint256 totalWbtcClaimed;
+        uint256 totalWsndClaimed;
+        uint256 pendingRewards;
+        uint256 lastUpdateTimestamp;
+        bool    prefersWSND;
     }
 
     mapping(address => UserInfo) public userInfo;
@@ -195,15 +149,6 @@ contract WaveSendFund is
     //                       INITIALIZER
     // ---------------------------------------------------------
 
-    /**
-     * @notice Initialise the proxy. Must be called once immediately after deployment.
-     * @param  _owner    Address that will own (and control upgrades of) the contract.
-     * @param  _usdt     Celo USDT address.
-     * @param  _wbtc     Celo bridged WBTC address.
-     * @param  _wsnd     Wave Send Token address.
-     * @param  _router   Uniswap V3 SwapRouter address on Celo.
-     * @param  _poolFee  Uniswap V3 fee tier (500 | 3000 | 10000).
-     */
     function initialize(
         address _owner,
         address _usdt,
@@ -219,15 +164,14 @@ contract WaveSendFund is
         require(_router != address(0), "WF: zero router");
 
         __Ownable_init(_owner);
-        __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
+        // No __UUPSUpgradeable_init() in OZ v5.
+        // ReentrancyGuard slot defaults to 0 (NOT_ENTERED) -- no init needed.
 
         usdt        = IERC20(_usdt);
         wbtc        = IERC20(_wbtc);
         wsnd        = IERC20(_wsnd);
         swapRouter  = ISwapRouter(_router);
         poolFee     = _poolFee;
-
         wsndPerWbtc = WSND_UNIT;
     }
 
@@ -235,36 +179,23 @@ contract WaveSendFund is
     //                     UUPS AUTHORISATION
     // ---------------------------------------------------------
 
-    /// @inheritdoc UUPSUpgradeable
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
     // ---------------------------------------------------------
     //                     ADMIN SETTERS
     // ---------------------------------------------------------
 
-    /**
-     * @notice Update the WSND : WBTC face-value ratio used when paying yield in WSND.
-     * @param  _wsndPerWbtc  WSND units (18 dec) equal to 1 WBTC unit (1e8).
-     */
     function setWsndPerWbtc(uint256 _wsndPerWbtc) external onlyOwner {
         require(_wsndPerWbtc > 0, "WF: ratio zero");
         wsndPerWbtc = _wsndPerWbtc;
         emit WsndRatioUpdated(_wsndPerWbtc);
     }
 
-    /**
-     * @notice Update the Uniswap V3 fee tier for USDT→WBTC swaps.
-     * @param  _poolFee  Fee in hundredths of a bip (500 | 3000 | 10000).
-     */
     function setPoolFee(uint24 _poolFee) external onlyOwner {
         poolFee = _poolFee;
         emit PoolFeeUpdated(_poolFee);
     }
 
-    /**
-     * @notice Replace the Uniswap V3 SwapRouter address.
-     * @param  _router  New router address.
-     */
     function setSwapRouter(address _router) external onlyOwner {
         require(_router != address(0), "WF: zero router");
         swapRouter = ISwapRouter(_router);
@@ -275,12 +206,6 @@ contract WaveSendFund is
     //              COMPANY LIQUIDITY FUNCTIONS
     // ---------------------------------------------------------
 
-    /**
-     * @notice Deposit any ERC-20 token into the fund as company liquidity.
-     * @dev    Pure liquidity top-up — no yield is accrued for the depositor.
-     * @param  token   Address of the ERC-20 token to deposit.
-     * @param  amount  Amount to deposit (in the token's native decimals).
-     */
     function fundDeposit(address token, uint256 amount) external nonReentrant {
         require(token  != address(0), "WF: zero token");
         require(amount >  0,          "WF: zero amount");
@@ -288,12 +213,6 @@ contract WaveSendFund is
         emit FundDeposited(token, amount, msg.sender);
     }
 
-    /**
-     * @notice Withdraw up to 10 % of any token's contract balance per 30-day rolling window.
-     * @param  token      ERC-20 token to withdraw.
-     * @param  amount     Amount to withdraw (token's native decimals).
-     * @param  recipient  Address that receives the tokens.
-     */
     function operationalWithdraw(
         address token,
         uint256 amount,
@@ -305,10 +224,8 @@ contract WaveSendFund is
 
         WithdrawWindow storage window = withdrawWindows[token];
 
-        if (
-            window.windowStart == 0 ||
-            block.timestamp >= window.windowStart + PERIOD_30_DAYS
-        ) {
+        if (window.windowStart == 0 ||
+            block.timestamp >= window.windowStart + PERIOD_30_DAYS) {
             window.windowStart       = block.timestamp;
             window.withdrawnInWindow = 0;
             window.snapshotBalance   = IERC20(token).balanceOf(address(this));
@@ -316,31 +233,19 @@ contract WaveSendFund is
 
         uint256 windowAllowance  = (window.snapshotBalance * MAX_WITHDRAW_BPS) / BPS_DENOM;
         uint256 alreadyWithdrawn = window.withdrawnInWindow;
-        require(alreadyWithdrawn < windowAllowance, "WF: monthly allowance exhausted");
-
-        uint256 remaining = windowAllowance - alreadyWithdrawn;
-        require(amount <= remaining, "WF: exceeds monthly 10% cap");
-        require(IERC20(token).balanceOf(address(this)) >= amount, "WF: insufficient contract balance");
+        require(alreadyWithdrawn < windowAllowance,                "WF: monthly allowance exhausted");
+        require(amount <= windowAllowance - alreadyWithdrawn,      "WF: exceeds monthly 10% cap");
+        require(IERC20(token).balanceOf(address(this)) >= amount,  "WF: insufficient contract balance");
 
         window.withdrawnInWindow += amount;
-
         IERC20(token).safeTransfer(recipient, amount);
 
-        emit OperationalWithdrawn(
-            token,
-            amount,
-            window.windowStart,
-            window.withdrawnInWindow,
-            windowAllowance
-        );
+        emit OperationalWithdrawn(token, amount, window.windowStart,
+                                  window.withdrawnInWindow, windowAllowance);
     }
 
-    /**
-     * @notice View the current operational withdrawal status for a given token.
-     */
     function getWithdrawStatus(address token)
-        external
-        view
+        external view
         returns (
             uint256 windowStart,
             uint256 withdrawnSoFar,
@@ -352,50 +257,35 @@ contract WaveSendFund is
         WithdrawWindow storage window = withdrawWindows[token];
 
         if (window.windowStart == 0) {
-            uint256 currentBal = IERC20(token).balanceOf(address(this));
-            uint256 allowance  = (currentBal * MAX_WITHDRAW_BPS) / BPS_DENOM;
-            return (0, 0, allowance, allowance, 0);
+            uint256 bal = IERC20(token).balanceOf(address(this));
+            uint256 al  = (bal * MAX_WITHDRAW_BPS) / BPS_DENOM;
+            return (0, 0, al, al, 0);
         }
 
-        bool windowExpired = block.timestamp >= window.windowStart + PERIOD_30_DAYS;
-
-        if (windowExpired) {
-            uint256 currentBal = IERC20(token).balanceOf(address(this));
-            uint256 allowance  = (currentBal * MAX_WITHDRAW_BPS) / BPS_DENOM;
-            return (block.timestamp, 0, allowance, allowance, block.timestamp + PERIOD_30_DAYS);
+        if (block.timestamp >= window.windowStart + PERIOD_30_DAYS) {
+            uint256 bal = IERC20(token).balanceOf(address(this));
+            uint256 al  = (bal * MAX_WITHDRAW_BPS) / BPS_DENOM;
+            return (block.timestamp, 0, al, al, block.timestamp + PERIOD_30_DAYS);
         }
 
         windowAllowance    = (window.snapshotBalance * MAX_WITHDRAW_BPS) / BPS_DENOM;
         withdrawnSoFar     = window.withdrawnInWindow;
-        remainingAllowance = windowAllowance > withdrawnSoFar ? windowAllowance - withdrawnSoFar : 0;
-        return (
-            window.windowStart,
-            withdrawnSoFar,
-            windowAllowance,
-            remainingAllowance,
-            window.windowStart + PERIOD_30_DAYS
-        );
+        remainingAllowance = windowAllowance > withdrawnSoFar
+                           ? windowAllowance - withdrawnSoFar : 0;
+        return (window.windowStart, withdrawnSoFar, windowAllowance,
+                remainingAllowance, window.windowStart + PERIOD_30_DAYS);
     }
 
     // ---------------------------------------------------------
     //                    USER-FACING FUNCTIONS
     // ---------------------------------------------------------
 
-    /**
-     * @notice Toggle whether your yield should be paid in WSND or WBTC.
-     * @param  _prefersWSND  `true` → always receive WSND; `false` → receive WBTC when available.
-     */
     function setRewardPreference(bool _prefersWSND) external {
         _updateYield(msg.sender);
         userInfo[msg.sender].prefersWSND = _prefersWSND;
         emit RewardPreferenceSet(msg.sender, _prefersWSND);
     }
 
-    /**
-     * @notice Deposit USDT into the pool. USDT is swapped to WBTC and credited as Hashrate.
-     * @param  usdtAmount   Amount of USDT to deposit (6-decimal units).
-     * @param  minWbtcOut   Minimum WBTC to receive from the swap (slippage guard).
-     */
     function deposit(uint256 usdtAmount, uint256 minWbtcOut) external nonReentrant {
         require(usdtAmount > 0, "WF: zero USDT");
         require(minWbtcOut > 0, "WF: zero min out");
@@ -403,7 +293,8 @@ contract WaveSendFund is
         _updateYield(msg.sender);
 
         usdt.safeTransferFrom(msg.sender, address(this), usdtAmount);
-        usdt.safeApprove(address(swapRouter), usdtAmount);
+        // forceApprove replaces safeApprove which was removed in OZ v5.
+        usdt.forceApprove(address(swapRouter), usdtAmount);
 
         uint256 wbtcReceived = swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
@@ -418,7 +309,7 @@ contract WaveSendFund is
             })
         );
 
-        UserInfo storage user = userInfo[msg.sender];
+        UserInfo storage user    = userInfo[msg.sender];
         user.activeHashrate      += wbtcReceived;
         user.totalDeposited      += wbtcReceived;
         totalPoolHashrate        += wbtcReceived;
@@ -427,11 +318,6 @@ contract WaveSendFund is
         emit UserDeposited(msg.sender, usdtAmount, wbtcReceived);
     }
 
-    /**
-     * @notice Withdraw WBTC principal from the pool.
-     * @dev    Accrued yield is synced but NOT auto-claimed. Call `claim()` separately.
-     * @param  wbtcAmount  Amount of WBTC to withdraw (8-decimal units).
-     */
     function withdraw(uint256 wbtcAmount) external nonReentrant {
         require(wbtcAmount > 0, "WF: zero amount");
 
@@ -445,18 +331,9 @@ contract WaveSendFund is
         totalPoolHashrate   -= wbtcAmount;
 
         wbtc.safeTransfer(msg.sender, wbtcAmount);
-
         emit UserWithdrawn(msg.sender, wbtcAmount);
     }
 
-    /**
-     * @notice Claim all accrued yield.
-     *
-     *         Priority tree:
-     *         A) `prefersWSND == true`                         → pay full reward in WSND.
-     *         B) `prefersWSND == false` AND pool WBTC < reward → full fallback to WSND.
-     *         C) `prefersWSND == false` AND pool WBTC ≥ reward → pay in WBTC.
-     */
     function claim() external nonReentrant {
         _updateYield(msg.sender);
 
@@ -474,7 +351,6 @@ contract WaveSendFund is
             require(wsnd.balanceOf(address(this)) >= wsndPaid, "WF: insufficient WSND");
             user.totalWsndClaimed += wsndPaid;
             wsnd.safeTransfer(msg.sender, wsndPaid);
-            usedFallback = false;
 
         } else if (wbtc.balanceOf(address(this)) < rewards) {
             wsndPaid = _wbtcToWsnd(rewards);
@@ -486,7 +362,6 @@ contract WaveSendFund is
         } else {
             user.totalWbtcClaimed += rewards;
             wbtc.safeTransfer(msg.sender, rewards);
-            usedFallback = false;
         }
 
         emit RewardClaimed(msg.sender, rewards, wsndPaid, usedFallback);
@@ -496,11 +371,6 @@ contract WaveSendFund is
     //                       VIEW FUNCTIONS
     // ---------------------------------------------------------
 
-    /**
-     * @notice Total pending yield for `account` (accrued + not yet claimed).
-     * @param  account  Wallet to query.
-     * @return WBTC-denominated pending yield (8 decimals).
-     */
     function getPendingYield(address account) external view returns (uint256) {
         UserInfo storage user = userInfo[account];
         return user.pendingRewards + _calculateYield(
@@ -509,9 +379,6 @@ contract WaveSendFund is
         );
     }
 
-    /**
-     * @notice Return the full UserInfo struct for `account`.
-     */
     function getUserInfo(address account) external view returns (UserInfo memory) {
         return userInfo[account];
     }
@@ -521,9 +388,7 @@ contract WaveSendFund is
     // ---------------------------------------------------------
 
     function _calculateYield(uint256 activeHashrate, uint256 lastUpdateTimestamp)
-        internal
-        view
-        returns (uint256 accrued)
+        internal view returns (uint256 accrued)
     {
         if (activeHashrate == 0 || lastUpdateTimestamp == 0) return 0;
         if (block.timestamp <= lastUpdateTimestamp)           return 0;

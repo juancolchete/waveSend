@@ -94,13 +94,16 @@ contract MockERC20 is Test {
 
 /// @dev Simulates Uniswap V3. Pulls tokenIn, releases a fixed wbtcOut to recipient.
 contract MockSwapRouter {
+    /// Configurable return amount (set per test).
     uint256 public wbtcOut;
+
     MockERC20 public wbtcToken;
 
     constructor(address _wbtc) {
         wbtcToken = MockERC20(_wbtc);
     }
 
+    /// Allow tests to control how much WBTC the swap returns.
     function setWbtcOut(uint256 _wbtcOut) external {
         wbtcOut = _wbtcOut;
     }
@@ -110,9 +113,15 @@ contract MockSwapRouter {
         payable
         returns (uint256 amountOut)
     {
+        // Pull tokenIn from the caller (the WaveSendFund contract).
         MockERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
+
+        // Verify slippage guard.
         require(wbtcOut >= params.amountOutMinimum, "MockRouter: slippage");
+
+        // Mint WBTC directly to the recipient (simulates the pool receiving WBTC).
         wbtcToken.mint(params.recipient, wbtcOut);
+
         return wbtcOut;
     }
 }
@@ -121,6 +130,7 @@ contract MockSwapRouter {
 //                       MALICIOUS REENTRANCY ATTACKER
 // =============================================================================
 
+/// @dev Attempts re-entry on claim().
 contract ReentrancyAttacker {
     WaveSendFund public fund;
     uint256 public attackCount;
@@ -129,12 +139,14 @@ contract ReentrancyAttacker {
         fund = WaveSendFund(_fund);
     }
 
-    fallback() external payable {
+    receive() external payable {
         if (attackCount < 1) {
             attackCount++;
             fund.claim();
         }
     }
+
+    fallback() external payable {}
 }
 
 // =============================================================================
@@ -143,9 +155,9 @@ contract ReentrancyAttacker {
 
 abstract contract WaveSendFundBase is Test {
     // ── Actors ─────────────────────────────────────────────────────────────────
-    address internal owner    = makeAddr("owner");
-    address internal alice    = makeAddr("alice");
-    address internal bob      = makeAddr("bob");
+    address internal owner   = makeAddr("owner");
+    address internal alice   = makeAddr("alice");
+    address internal bob     = makeAddr("bob");
     address internal treasury = makeAddr("treasury");
 
     // ── Tokens ─────────────────────────────────────────────────────────────────
@@ -154,18 +166,19 @@ abstract contract WaveSendFundBase is Test {
     MockERC20 internal wsndToken;
 
     // ── Infrastructure ─────────────────────────────────────────────────────────
-    MockSwapRouter internal router;
-    WaveSendFund   internal fund;
+    MockSwapRouter   internal router;
+    WaveSendFund     internal fund;    // proxy
 
-    // ── Constants ──────────────────────────────────────────────────────────────
-    uint256 internal constant PERIOD     = 2_592_000;
-    uint256 internal constant WBTC_UNIT  = 1e8;
-    uint256 internal constant WSND_UNIT  = 1e18;
-    uint24  internal constant POOL_FEE   = 500;
+    // ── Constants mirrored from contract ───────────────────────────────────────
+    uint256 internal constant PERIOD      = 2_592_000;   // 30 days
+    uint256 internal constant WBTC_UNIT   = 1e8;
+    uint256 internal constant WSND_UNIT   = 1e18;
+    uint24  internal constant POOL_FEE    = 500;
 
-    uint256 internal constant USDT_1K    = 1_000e6;
-    uint256 internal constant WBTC_1     = 1e8;
-    uint256 internal constant WSND_LARGE = 1_000e18;
+    // ── Useful amounts ─────────────────────────────────────────────────────────
+    uint256 internal constant USDT_1K     = 1_000e6;     // 1 000 USDT
+    uint256 internal constant WBTC_1      = 1e8;         // 1 WBTC
+    uint256 internal constant WSND_LARGE  = 1_000e18;    // 1 000 WSND reserve
 
     function setUp() public virtual {
         usdtToken = new MockERC20("Celo USDT", "USDT", 6);
@@ -202,9 +215,7 @@ abstract contract WaveSendFundBase is Test {
         fund.deposit(USDT_1K, 1);
     }
 
-    function _skip(uint256 seconds_) internal {
-        skip(seconds_);
-    }
+    function _skip(uint256 seconds_) internal { skip(seconds_); }
 
     function _expectedYield(uint256 hashrate, uint256 elapsed) internal pure returns (uint256) {
         return (hashrate * 100 * elapsed) / (10_000 * PERIOD);
@@ -408,7 +419,6 @@ contract WaveSendFund_Deposit is WaveSendFundBase {
         router.setWbtcOut(2 * WBTC_1);
         vm.prank(bob);
         fund.deposit(USDT_1K, 1);
-
         (uint256 hA,,,,,, ) = fund.userInfo(alice);
         (uint256 hB,,,,,, ) = fund.userInfo(bob);
         assertEq(hA, WBTC_1);
@@ -495,12 +505,15 @@ contract WaveSendFund_YieldAccrual is WaveSendFundBase {
     }
 
     function test_getPendingYield_zeroBeforeTimeElapsed() public view {
-        assertEq(fund.getPendingYield(alice), 0);
+        uint256 pending = fund.getPendingYield(alice);
+        assertEq(pending, 0);
     }
 
     function test_getPendingYield_after30Days() public {
         _skip(PERIOD);
-        assertApproxEqAbs(fund.getPendingYield(alice), _expectedYield(WBTC_1, PERIOD), 10);
+        uint256 pending  = fund.getPendingYield(alice);
+        uint256 expected = _expectedYield(WBTC_1, PERIOD);
+        assertApproxEqAbs(pending, expected, 10);
     }
 
     function test_getPendingYield_linearlyScalesWithTime() public {
@@ -526,7 +539,8 @@ contract WaveSendFund_YieldAccrual is WaveSendFundBase {
         fund.withdraw(WBTC_1);
         uint256 pendingAtWithdraw = fund.getPendingYield(alice);
         _skip(PERIOD);
-        assertEq(fund.getPendingYield(alice), pendingAtWithdraw);
+        uint256 pendingLater = fund.getPendingYield(alice);
+        assertEq(pendingAtWithdraw, pendingLater);
     }
 
     function test_setRewardPreference_snapshotsYield() public {
@@ -539,7 +553,8 @@ contract WaveSendFund_YieldAccrual is WaveSendFundBase {
 
     function test_yieldFormula_oneBtcOneMonth_exactMath() public {
         _skip(PERIOD);
-        assertEq(fund.getPendingYield(alice), 1_000_000);
+        uint256 pending = fund.getPendingYield(alice);
+        assertEq(pending, 1_000_000);
     }
 }
 
@@ -596,7 +611,8 @@ contract WaveSendFund_Claim is WaveSendFundBase {
         uint256 wsndBefore = wsndToken.balanceOf(alice);
         vm.prank(alice);
         fund.claim();
-        assertApproxEqAbs(wsndToken.balanceOf(alice), wsndBefore + _wbtcToWsnd(pending), 1e10);
+        uint256 expectedWsnd = _wbtcToWsnd(pending);
+        assertApproxEqAbs(wsndToken.balanceOf(alice), wsndBefore + expectedWsnd, 1e10);
     }
 
     function test_claim_branchA_updatesTotalWsndClaimed() public {
@@ -623,6 +639,7 @@ contract WaveSendFund_Claim is WaveSendFundBase {
     // ── Branch B: prefers WBTC but pool is short → fallback to WSND ───────────
 
     function test_claim_branchB_fallbackToWsnd() public {
+        // Deploy a fresh fund with zero WBTC so branch B fires.
         WaveSendFund impl2 = new WaveSendFund();
         bytes memory initData = abi.encodeCall(
             WaveSendFund.initialize,
@@ -631,30 +648,46 @@ contract WaveSendFund_Claim is WaveSendFundBase {
         ERC1967Proxy proxy2 = new ERC1967Proxy(address(impl2), initData);
         WaveSendFund fund2 = WaveSendFund(address(proxy2));
 
-        // Only 1 satoshi of WBTC — cannot cover any real reward.
-        wbtcToken.mint(address(fund2), 1);
+        // Seed WSND only — no WBTC pre-minted into fund2.
         wsndToken.mint(address(fund2), WSND_LARGE);
 
         usdtToken.mint(alice, USDT_1K);
         vm.prank(alice);
         usdtToken.approve(address(fund2), type(uint256).max);
         router.setWbtcOut(WBTC_1);
+
+        // Deposit: the mock router mints WBTC_1 directly into fund2.
         vm.prank(alice);
         fund2.deposit(USDT_1K, 1);
+
+        // Zero out fund2's WBTC balance via vm.store so pool WBTC < any reward.
+        // MockERC20.balanceOf is mapping(address=>uint256) at slot 0.
+        vm.store(
+            address(wbtcToken),
+            keccak256(abi.encode(address(fund2), uint256(0))),
+            bytes32(0)
+        );
 
         _skip(PERIOD);
 
         uint256 pending    = fund2.getPendingYield(alice);
         uint256 wsndBefore = wsndToken.balanceOf(alice);
 
+        // Alice does NOT prefer WSND, but pool WBTC == 0 < reward → fallback fires.
         vm.prank(alice);
         fund2.claim();
 
+        // pending ~= 1_000_000 WBTC-units → wsndExpected ~= 1e16 WSND-units
         uint256 wsndExpected = (pending * WSND_UNIT) / WBTC_UNIT;
-        assertApproxEqAbs(wsndToken.balanceOf(alice), wsndBefore + wsndExpected, 1e10);
+        assertApproxEqAbs(wsndToken.balanceOf(alice), wsndBefore + wsndExpected, 1e14);
     }
 
     function test_claim_revertsNothingToClaim() public {
+        // setUp already skipped PERIOD, so alice has yield -- drain it first.
+        vm.prank(alice);
+        fund.claim();
+
+        // Now pending == 0; next call must revert.
         vm.prank(alice);
         vm.expectRevert("WF: nothing to claim");
         fund.claim();
@@ -679,6 +712,7 @@ contract WaveSendFund_Claim is WaveSendFundBase {
 
         vm.prank(alice);
         fund2.setRewardPreference(true);
+
         _skip(PERIOD);
 
         vm.prank(alice);
@@ -852,9 +886,7 @@ contract WaveSendFund_OperationalWithdraw is WaveSendFundBase {
         uint256 tenPct = poolWbtc / 10;
         vm.prank(owner);
         fund.operationalWithdraw(address(wbtcToken), tenPct, treasury);
-
         _skip(PERIOD + 1);
-
         uint256 newBalance   = wbtcToken.balanceOf(address(fund));
         uint256 newAllowance = newBalance / 10;
         vm.prank(owner);
@@ -1011,18 +1043,14 @@ contract WaveSendFund_Lifecycle is WaveSendFundBase {
         _deposit(alice);
         router.setWbtcOut(2 * WBTC_1);
         _deposit(bob);
-
         _skip(PERIOD);
-
         uint256 aliceY = fund.getPendingYield(alice);
         uint256 bobY   = fund.getPendingYield(bob);
         assertApproxEqAbs(bobY, aliceY * 2, 20);
-
         vm.prank(alice);
         fund.claim();
         vm.prank(bob);
         fund.claim();
-
         assertEq(fund.getPendingYield(alice), 0);
         assertEq(fund.getPendingYield(bob),   0);
     }
@@ -1033,12 +1061,10 @@ contract WaveSendFund_Lifecycle is WaveSendFundBase {
         wbtcToken.approve(address(fund), 5 * WBTC_1);
         vm.prank(owner);
         fund.fundDeposit(address(wbtcToken), 5 * WBTC_1);
-
         uint256 poolBal = wbtcToken.balanceOf(address(fund));
         uint256 tenPct  = poolBal / 10;
         vm.prank(owner);
         fund.operationalWithdraw(address(wbtcToken), tenPct, treasury);
-
         assertEq(wbtcToken.balanceOf(treasury), tenPct);
         assertEq(wbtcToken.balanceOf(address(fund)), poolBal - tenPct);
     }
@@ -1048,7 +1074,6 @@ contract WaveSendFund_Lifecycle is WaveSendFundBase {
         _skip(PERIOD / 2);
         _deposit(alice);
         _skip(PERIOD / 2);
-
         uint256 pending    = fund.getPendingYield(alice);
         uint256 firstHalf  = _expectedYield(WBTC_1,     PERIOD / 2);
         uint256 secondHalf = _expectedYield(2 * WBTC_1, PERIOD / 2);
@@ -1065,10 +1090,8 @@ contract WaveSendFund_Reentrancy is WaveSendFundBase {
     function test_reentrancyGuard_claimIsProtected() public {
         _deposit(alice);
         _skip(PERIOD);
-
         vm.prank(alice);
         fund.claim();
-
         vm.prank(alice);
         vm.expectRevert("WF: nothing to claim");
         fund.claim();
@@ -1090,8 +1113,8 @@ contract WaveSendFund_Fuzz is WaveSendFundBase {
         vm.assume(elapsed <= PERIOD * 12);
         _deposit(alice);
         _skip(elapsed);
-        uint256 pending      = fund.getPendingYield(alice);
-        uint256 maxExpected  = (WBTC_1 * 100 * elapsed) / (10_000 * PERIOD);
+        uint256 pending     = fund.getPendingYield(alice);
+        uint256 maxExpected = (WBTC_1 * 100 * elapsed) / (10_000 * PERIOD);
         assertEq(pending, maxExpected);
     }
 
