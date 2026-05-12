@@ -3,53 +3,62 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Allows you to run this manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: main 
 
     steps:
       - name: Checkout Source
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js (LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 'lts/*'
+          cache: 'pnpm' # Now correctly looks for pnpm-lock.yaml
 
       - name: Install Dependencies
-        run: npm ci # Use npm install if you don't have a package-lock.json committed
+        run: pnpm install --no-frozen-lockfile
 
       - name: Swap Next.js Config for Mobile Export
-        # Overwrites next.config.ts with your mobile version for this CI run only
+        # Overwrites your local 'standalone' config with the mobile 'export' config
         run: cp next.config.mobile.ts next.config.ts
 
       - name: Build Next.js Static Export
-        run: npm run build
+        env:
+          NEXT_PUBLIC_TWILLIO_NUMBER: ${{ secrets.NEXT_PUBLIC_TWILLIO_NUMBER }}
+        run: pnpm run build
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17' # Java 17 is standard for modern Android builds
+          java-version: '21'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Capacitor Sync
+      - name: Initialize Android & Generate Icons
         run: |
-          # Ensure Capacitor CLI and Android platform are installed
-          npm install @capacitor/cli @capacitor/core @capacitor/android
-          
-          # Initialize Android if the folder doesn't exist yet
           if [ ! -d "android" ]; then
-            npx cap add android
+            pnpm exec cap add android
           fi
           
-          # Sync the 'out' folder into the Android project
-          npx cap sync android
+          mkdir -p assets
+          cp public/wavesendlogo.png assets/icon.png
+          cp public/wavesendlogo.png assets/splash.png 
+          
+          npx @capacitor/assets generate --android
+          
+          pnpm exec cap sync android
 
       - name: Build APK (Debug)
         run: |
@@ -60,5 +69,5 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: my-app-debug-apk
+          name: WaveSend-Debug-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
