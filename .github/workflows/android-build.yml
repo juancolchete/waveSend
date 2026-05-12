@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Binds this job to the "main" environment in GitHub
     environment: main 
 
     steps:
@@ -32,7 +31,10 @@ jobs:
       - name: Build Next.js Static Export
         env:
           NEXT_PUBLIC_TWILLIO_NUMBER: ${{ secrets.NEXT_PUBLIC_TWILLIO_NUMBER }}
-        run: pnpm run build
+        run: |
+          pnpm run build
+          # Verify the folder was created
+          ls -d out
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -45,15 +47,21 @@ jobs:
 
       - name: Initialize Android & Generate Icons
         run: |
+          # 1. Ensure android folder exists
           if [ ! -d "android" ]; then
             pnpm exec cap add android
           fi
           
+          # 2. Setup Assets (Icon/Splash)
           mkdir -p assets
           cp public/wavesendlogo.png assets/icon.png
+          # Also need a splash if you want a custom one, otherwise it uses default
+          cp public/wavesendlogo.png assets/splash.png 
           
+          # 3. Generate native assets
           npx @capacitor/assets generate --android
           
+          # 4. Sync assets to Android
           pnpm exec cap sync android
 
       - name: Build APK (Debug)
