@@ -17,6 +17,7 @@
             foundry
             solc
             pnpm
+            jq
           ];
 
           shellHook = ''
