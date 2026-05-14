@@ -27,7 +27,7 @@ interface ISwapRouter {
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -41,6 +41,11 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * @author Senior Smart Contract Developer
  * @notice A UUPS-upgradeable DeFi Mining Pool on Celo Mainnet operated by Wavesend.
  *
+ *         Role architecture:
+ *           DEFAULT_ADMIN_ROLE  -- can grant/revoke all roles; assigned to deployer.
+ *           OPERATOR_ROLE       -- admin setters (fee, router, ratio) + operationalWithdraw.
+ *           UPGRADER_ROLE       -- authorises UUPS proxy upgrades.
+ *
  *         Yield formula (linear, per second):
  *           pendingRewards = (activeHashrate x 100 x timeElapsed) / (10_000 x 2_592_000)
  *
@@ -50,18 +55,30 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  *           WSND  -- 18 decimals  (Wave Send Token)
  *
  *         OZ v5 notes:
- *           - ReentrancyGuard (non-upgradeable) used; safe with UUPS proxies.
- *           - __UUPSUpgradeable_init() removed in OZ v5 -- not called.
+ *           - AccessControlUpgradeable replaces OwnableUpgradeable.
+ *           - ReentrancyGuard (non-upgradeable) safe with UUPS proxies.
+ *           - __UUPSUpgradeable_init() removed in OZ v5.
  *           - safeApprove removed in OZ v5 -- forceApprove used instead.
- *           - SafeERC20Upgradeable removed in OZ v5 -- SafeERC20 used instead.
  */
 contract WaveSendFund is
     Initializable,
     UUPSUpgradeable,
-    OwnableUpgradeable,
+    AccessControlUpgradeable,
     ReentrancyGuard
 {
     using SafeERC20 for IERC20;
+
+    // ---------------------------------------------------------
+    //                          ROLES
+    // ---------------------------------------------------------
+
+    /// @notice Can call admin setters and operationalWithdraw.
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+
+    /// @notice Can authorise UUPS proxy upgrades.
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+
+    // Note: DEFAULT_ADMIN_ROLE = 0x00 is inherited from AccessControl.
 
     // ---------------------------------------------------------
     //                        CONSTANTS
@@ -149,23 +166,35 @@ contract WaveSendFund is
     //                       INITIALIZER
     // ---------------------------------------------------------
 
+    /**
+     * @notice Initialise the proxy. Must be called once immediately after deployment.
+     * @param  _admin    Receives DEFAULT_ADMIN_ROLE, OPERATOR_ROLE, and UPGRADER_ROLE.
+     * @param  _usdt     Celo USDT address.
+     * @param  _wbtc     Celo bridged WBTC address.
+     * @param  _wsnd     Wave Send Token address.
+     * @param  _router   Uniswap V3 SwapRouter address on Celo.
+     * @param  _poolFee  Uniswap V3 fee tier (500 | 3000 | 10000).
+     */
     function initialize(
-        address _owner,
+        address _admin,
         address _usdt,
         address _wbtc,
         address _wsnd,
         address _router,
         uint24  _poolFee
     ) external initializer {
-        require(_owner  != address(0), "WF: zero owner");
+        require(_admin  != address(0), "WF: zero admin");
         require(_usdt   != address(0), "WF: zero USDT");
         require(_wbtc   != address(0), "WF: zero WBTC");
         require(_wsnd   != address(0), "WF: zero WSND");
         require(_router != address(0), "WF: zero router");
 
-        __Ownable_init(_owner);
-        // No __UUPSUpgradeable_init() in OZ v5.
+        __AccessControl_init();
         // ReentrancyGuard slot defaults to 0 (NOT_ENTERED) -- no init needed.
+
+        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+        _grantRole(OPERATOR_ROLE,      _admin);
+        _grantRole(UPGRADER_ROLE,      _admin);
 
         usdt        = IERC20(_usdt);
         wbtc        = IERC20(_wbtc);
@@ -179,24 +208,24 @@ contract WaveSendFund is
     //                     UUPS AUTHORISATION
     // ---------------------------------------------------------
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address) internal override onlyRole(UPGRADER_ROLE) {}
 
     // ---------------------------------------------------------
     //                     ADMIN SETTERS
     // ---------------------------------------------------------
 
-    function setWsndPerWbtc(uint256 _wsndPerWbtc) external onlyOwner {
+    function setWsndPerWbtc(uint256 _wsndPerWbtc) external onlyRole(OPERATOR_ROLE) {
         require(_wsndPerWbtc > 0, "WF: ratio zero");
         wsndPerWbtc = _wsndPerWbtc;
         emit WsndRatioUpdated(_wsndPerWbtc);
     }
 
-    function setPoolFee(uint24 _poolFee) external onlyOwner {
+    function setPoolFee(uint24 _poolFee) external onlyRole(OPERATOR_ROLE) {
         poolFee = _poolFee;
         emit PoolFeeUpdated(_poolFee);
     }
 
-    function setSwapRouter(address _router) external onlyOwner {
+    function setSwapRouter(address _router) external onlyRole(OPERATOR_ROLE) {
         require(_router != address(0), "WF: zero router");
         swapRouter = ISwapRouter(_router);
         emit RouterUpdated(_router);
@@ -217,7 +246,7 @@ contract WaveSendFund is
         address token,
         uint256 amount,
         address recipient
-    ) external nonReentrant onlyOwner {
+    ) external nonReentrant onlyRole(OPERATOR_ROLE) {
         require(token     != address(0), "WF: zero token");
         require(amount    >  0,          "WF: zero amount");
         require(recipient != address(0), "WF: zero recipient");
@@ -293,7 +322,6 @@ contract WaveSendFund is
         _updateYield(msg.sender);
 
         usdt.safeTransferFrom(msg.sender, address(this), usdtAmount);
-        // forceApprove replaces safeApprove which was removed in OZ v5.
         usdt.forceApprove(address(swapRouter), usdtAmount);
 
         uint256 wbtcReceived = swapRouter.exactInputSingle(
