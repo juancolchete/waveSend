@@ -315,7 +315,23 @@ contract WaveSendFund is
         emit RewardPreferenceSet(msg.sender, _prefersWSND);
     }
 
-    function deposit(uint256 usdtAmount, uint256 minWbtcOut) external nonReentrant {
+    function depositOne() public {
+      deposit(1 ether,100);
+    }
+
+    function depositTen() public {
+      deposit(10 ether,100);
+    }
+
+    function depositHun() public {
+      deposit(100 ether,100);
+    }
+
+    function depositDirect(uint256 usdtAmount) public{
+      deposit(usdtAmount,100);
+    }
+
+    function deposit(uint256 usdtAmount, uint256 minWbtcOut) public nonReentrant {
         require(usdtAmount > 0, "WF: zero USDT");
         require(minWbtcOut > 0, "WF: zero min out");
 
