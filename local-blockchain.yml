@@ -1,0 +1,15 @@
+services:
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    container_name: local-anvil
+    ports:
+      - "8545:8545"
+    entrypoint: ["anvil", "--host", "0.0.0.0", "--allow-origin", "*","--fork-url","https://forno.celo.org"]
+
+  otterscan:
+    image: otterscan/otterscan:latest
+    container_name: local-otterscan
+    ports:
+      - "5000:80"
+    depends_on:
+      - anvil
