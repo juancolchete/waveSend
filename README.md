@@ -117,7 +117,7 @@ flowchart TD
 - Support for ERC-20 tokens 
 
 ### Phase 2: Expansion
-- Expansion to additional blockchain networks
+- Wave Send Fund
 - Support for NFTs
 - Expasion to Lightning Network
 - Native bridge with Celo Network
