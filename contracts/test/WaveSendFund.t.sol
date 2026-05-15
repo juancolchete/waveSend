@@ -3,13 +3,8 @@ pragma solidity ^0.8.30;
 
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
-
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {WaveSendFund} from "../src/WaveSendFund.sol";
-
-// =============================================================================
-//          LOCAL INTERFACE – needed by MockSwapRouter
-// =============================================================================
 
 interface ISwapRouter {
     struct ExactInputSingleParams {
@@ -26,10 +21,6 @@ interface ISwapRouter {
         external payable returns (uint256 amountOut);
 }
 
-// =============================================================================
-//                          MOCK TOKENS
-// =============================================================================
-
 contract MockERC20 is Test {
     string  public name;
     string  public symbol;
@@ -43,20 +34,16 @@ contract MockERC20 is Test {
     event Approval(address indexed owner, address indexed spender, uint256 value);
 
     constructor(string memory _name, string memory _symbol, uint8 _decimals) {
-        name     = _name;
-        symbol   = _symbol;
-        decimals = _decimals;
+        name = _name; symbol = _symbol; decimals = _decimals;
     }
 
     function mint(address to, uint256 amount) external {
-        balanceOf[to] += amount;
-        totalSupply    += amount;
+        balanceOf[to] += amount; totalSupply += amount;
         emit Transfer(address(0), to, amount);
     }
 
     function burn(address from, uint256 amount) external {
-        balanceOf[from] -= amount;
-        totalSupply      -= amount;
+        balanceOf[from] -= amount; totalSupply -= amount;
         emit Transfer(from, address(0), amount);
     }
 
@@ -78,28 +65,31 @@ contract MockERC20 is Test {
 
     function _transfer(address from, address to, uint256 amount) internal returns (bool) {
         require(balanceOf[from] >= amount, "MockERC20: balance");
-        balanceOf[from] -= amount;
-        balanceOf[to]   += amount;
+        balanceOf[from] -= amount; balanceOf[to] += amount;
         emit Transfer(from, to, amount);
         return true;
     }
 }
 
-// =============================================================================
-//                          MOCK SWAP ROUTER
-// =============================================================================
-
 contract MockSwapRouter {
     uint256   public wbtcOut;
+    uint256   public wbtcOutNative;
     MockERC20 public wbtcToken;
 
     constructor(address _wbtc) { wbtcToken = MockERC20(_wbtc); }
 
     function setWbtcOut(uint256 _wbtcOut) external { wbtcOut = _wbtcOut; }
+    function setWbtcOutNative(uint256 _wbtcOut) external { wbtcOutNative = _wbtcOut; }
 
     function exactInputSingle(ISwapRouter.ExactInputSingleParams calldata params)
         external payable returns (uint256 amountOut)
     {
+        if (params.tokenIn == address(0)) {
+            require(msg.value == params.amountIn,              "MockRouter: value mismatch");
+            require(wbtcOutNative >= params.amountOutMinimum,  "MockRouter: native slippage");
+            wbtcToken.mint(params.recipient, wbtcOutNative);
+            return wbtcOutNative;
+        }
         MockERC20(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn);
         require(wbtcOut >= params.amountOutMinimum, "MockRouter: slippage");
         wbtcToken.mint(params.recipient, wbtcOut);
@@ -107,15 +97,11 @@ contract MockSwapRouter {
     }
 }
 
-// =============================================================================
-//                       REENTRANCY ATTACKER
-// =============================================================================
-
 contract ReentrancyAttacker {
     WaveSendFund public fund;
     uint256 public attackCount;
 
-    constructor(address _fund) { fund = WaveSendFund(_fund); }
+    constructor(address _fund) { fund = WaveSendFund(payable(_fund)); }
 
     receive() external payable {
         if (attackCount < 1) { attackCount++; fund.claim(); }
@@ -123,10 +109,6 @@ contract ReentrancyAttacker {
 
     fallback() external payable {}
 }
-
-// =============================================================================
-//                           BASE TEST FIXTURE
-// =============================================================================
 
 abstract contract WaveSendFundBase is Test {
     address internal admin    = makeAddr("admin");
@@ -144,6 +126,7 @@ abstract contract WaveSendFundBase is Test {
     uint256 internal constant WBTC_UNIT  = 1e8;
     uint256 internal constant WSND_UNIT  = 1e18;
     uint24  internal constant POOL_FEE   = 500;
+    uint24  internal constant NATIVE_FEE = 3000;
     uint256 internal constant USDT_1K    = 1_000e6;
     uint256 internal constant WBTC_1     = 1e8;
     uint256 internal constant WSND_LARGE = 1_000e18;
@@ -157,9 +140,9 @@ abstract contract WaveSendFundBase is Test {
         WaveSendFund impl = new WaveSendFund();
         bytes memory initData = abi.encodeCall(
             WaveSendFund.initialize,
-            (admin, address(usdtToken), address(wbtcToken), address(wsndToken), address(router), POOL_FEE)
+            (admin, address(usdtToken), address(wbtcToken), address(wsndToken), address(router), POOL_FEE, NATIVE_FEE)
         );
-        fund = WaveSendFund(address(new ERC1967Proxy(address(impl), initData)));
+        fund = WaveSendFund(payable(address(new ERC1967Proxy(address(impl), initData))));
 
         wsndToken.mint(address(fund), WSND_LARGE);
         wbtcToken.mint(address(fund), 10 * WBTC_1);
@@ -167,17 +150,15 @@ abstract contract WaveSendFundBase is Test {
         usdtToken.mint(alice, 10 * USDT_1K);
         usdtToken.mint(bob,   10 * USDT_1K);
 
-        vm.prank(alice);
-        usdtToken.approve(address(fund), type(uint256).max);
-        vm.prank(bob);
-        usdtToken.approve(address(fund), type(uint256).max);
+        vm.prank(alice); usdtToken.approve(address(fund), type(uint256).max);
+        vm.prank(bob);   usdtToken.approve(address(fund), type(uint256).max);
 
         router.setWbtcOut(WBTC_1);
+        router.setWbtcOutNative(WBTC_1);
     }
 
     function _deposit(address user) internal {
-        vm.prank(user);
-        fund.deposit(USDT_1K, 1);
+        vm.prank(user); fund.deposit(USDT_1K, 1);
     }
 
     function _skip(uint256 s) internal { skip(s); }
@@ -215,34 +196,29 @@ contract WaveSendFund_Initialize is WaveSendFundBase {
 
     function test_initialize_setsPoolFee() public view {
         assertEq(fund.poolFee(), POOL_FEE);
+        assertEq(fund.nativeFee(), NATIVE_FEE);
     }
 
     function test_initialize_revertsOnDoubleInit() public {
         vm.expectRevert();
         fund.initialize(admin, address(usdtToken), address(wbtcToken),
-                        address(wsndToken), address(router), POOL_FEE);
+                        address(wsndToken), address(router), POOL_FEE, NATIVE_FEE);
     }
 
     function test_initialize_revertsZeroAdmin() public {
         WaveSendFund impl2 = new WaveSendFund();
-        bytes memory data = abi.encodeCall(
-            WaveSendFund.initialize,
-            (address(0), address(usdtToken), address(wbtcToken),
-             address(wsndToken), address(router), POOL_FEE)
-        );
         vm.expectRevert("WF: zero admin");
-        new ERC1967Proxy(address(impl2), data);
+        new ERC1967Proxy(address(impl2), abi.encodeCall(WaveSendFund.initialize,
+            (address(0), address(usdtToken), address(wbtcToken),
+             address(wsndToken), address(router), POOL_FEE, NATIVE_FEE)));
     }
 
     function test_initialize_revertsZeroUsdt() public {
         WaveSendFund impl2 = new WaveSendFund();
-        bytes memory data = abi.encodeCall(
-            WaveSendFund.initialize,
-            (admin, address(0), address(wbtcToken),
-             address(wsndToken), address(router), POOL_FEE)
-        );
         vm.expectRevert("WF: zero USDT");
-        new ERC1967Proxy(address(impl2), data);
+        new ERC1967Proxy(address(impl2), abi.encodeCall(WaveSendFund.initialize,
+            (admin, address(0), address(wbtcToken),
+             address(wsndToken), address(router), POOL_FEE, NATIVE_FEE)));
     }
 }
 
@@ -253,8 +229,7 @@ contract WaveSendFund_Initialize is WaveSendFundBase {
 contract WaveSendFund_AdminSetters is WaveSendFundBase {
 
     function test_setWsndPerWbtc_updatesRatio() public {
-        vm.prank(admin);
-        fund.setWsndPerWbtc(2e18);
+        vm.prank(admin); fund.setWsndPerWbtc(2e18);
         assertEq(fund.wsndPerWbtc(), 2e18);
     }
 
@@ -272,27 +247,21 @@ contract WaveSendFund_AdminSetters is WaveSendFundBase {
     }
 
     function test_setWsndPerWbtc_revertsNonOperator() public {
-        vm.prank(alice);
-        vm.expectRevert();
-        fund.setWsndPerWbtc(2e18);
+        vm.prank(alice); vm.expectRevert(); fund.setWsndPerWbtc(2e18);
     }
 
     function test_setPoolFee_updates() public {
-        vm.prank(admin);
-        fund.setPoolFee(3000);
+        vm.prank(admin); fund.setPoolFee(3000);
         assertEq(fund.poolFee(), 3000);
     }
 
     function test_setPoolFee_revertsNonOperator() public {
-        vm.prank(alice);
-        vm.expectRevert();
-        fund.setPoolFee(3000);
+        vm.prank(alice); vm.expectRevert(); fund.setPoolFee(3000);
     }
 
     function test_setSwapRouter_updates() public {
         address newRouter = makeAddr("newRouter");
-        vm.prank(admin);
-        fund.setSwapRouter(newRouter);
+        vm.prank(admin); fund.setSwapRouter(newRouter);
         assertEq(address(fund.swapRouter()), newRouter);
     }
 
@@ -303,14 +272,12 @@ contract WaveSendFund_AdminSetters is WaveSendFundBase {
     }
 
     function test_setSwapRouter_revertsNonOperator() public {
-        vm.prank(alice);
-        vm.expectRevert();
-        fund.setSwapRouter(makeAddr("x"));
+        vm.prank(alice); vm.expectRevert(); fund.setSwapRouter(makeAddr("x"));
     }
 }
 
 // =============================================================================
-//  SECTION 3 – DEPOSIT (user)
+//  SECTION 3 – DEPOSIT (USDT)
 // =============================================================================
 
 contract WaveSendFund_Deposit is WaveSendFundBase {
@@ -347,36 +314,26 @@ contract WaveSendFund_Deposit is WaveSendFundBase {
     }
 
     function test_deposit_revertsZeroUsdt() public {
-        vm.prank(alice);
-        vm.expectRevert("WF: zero USDT");
-        fund.deposit(0, 1);
+        vm.prank(alice); vm.expectRevert("WF: zero USDT"); fund.deposit(0, 1);
     }
 
     function test_deposit_revertsZeroMinOut() public {
-        vm.prank(alice);
-        vm.expectRevert("WF: zero min out");
-        fund.deposit(USDT_1K, 0);
+        vm.prank(alice); vm.expectRevert("WF: zero min out"); fund.deposit(USDT_1K, 0);
     }
 
     function test_deposit_revertsSlippage() public {
         router.setWbtcOut(0);
-        vm.prank(alice);
-        vm.expectRevert("MockRouter: slippage");
-        fund.deposit(USDT_1K, WBTC_1);
+        vm.prank(alice); vm.expectRevert("MockRouter: slippage"); fund.deposit(USDT_1K, WBTC_1);
     }
 
     function test_deposit_multipleDeposits_accumulatesHashrate() public {
-        _deposit(alice);
-        _skip(PERIOD / 2);
-        _deposit(alice);
+        _deposit(alice); _skip(PERIOD / 2); _deposit(alice);
         (uint256 hashrate,,,,,, ) = fund.userInfo(alice);
         assertEq(hashrate, 2 * WBTC_1);
     }
 
     function test_deposit_multipleDeposits_snapshotsPendingYield() public {
-        _deposit(alice);
-        _skip(PERIOD);
-        _deposit(alice);
+        _deposit(alice); _skip(PERIOD); _deposit(alice);
         (,,,, uint256 pending,,) = fund.userInfo(alice);
         assertApproxEqAbs(pending, 1_000_000, 10);
     }
@@ -384,8 +341,7 @@ contract WaveSendFund_Deposit is WaveSendFundBase {
     function test_deposit_twoUsers_independentHashrates() public {
         _deposit(alice);
         router.setWbtcOut(2 * WBTC_1);
-        vm.prank(bob);
-        fund.deposit(USDT_1K, 1);
+        vm.prank(bob); fund.deposit(USDT_1K, 1);
         (uint256 hA,,,,,, ) = fund.userInfo(alice);
         (uint256 hB,,,,,, ) = fund.userInfo(bob);
         assertEq(hA, WBTC_1);
@@ -395,7 +351,7 @@ contract WaveSendFund_Deposit is WaveSendFundBase {
 }
 
 // =============================================================================
-//  SECTION 4 – WITHDRAW (user)
+//  SECTION 4 – WITHDRAW
 // =============================================================================
 
 contract WaveSendFund_Withdraw is WaveSendFundBase {
@@ -427,22 +383,17 @@ contract WaveSendFund_Withdraw is WaveSendFundBase {
     }
 
     function test_withdraw_syncsYieldBeforeReducing() public {
-        _skip(PERIOD);
-        vm.prank(alice); fund.withdraw(WBTC_1);
+        _skip(PERIOD); vm.prank(alice); fund.withdraw(WBTC_1);
         (,,,, uint256 pending,,) = fund.userInfo(alice);
         assertApproxEqAbs(pending, 1_000_000, 10);
     }
 
     function test_withdraw_revertsZeroAmount() public {
-        vm.prank(alice);
-        vm.expectRevert("WF: zero amount");
-        fund.withdraw(0);
+        vm.prank(alice); vm.expectRevert("WF: zero amount"); fund.withdraw(0);
     }
 
     function test_withdraw_revertsInsufficientHashrate() public {
-        vm.prank(alice);
-        vm.expectRevert("WF: insufficient hashrate");
-        fund.withdraw(WBTC_1 + 1);
+        vm.prank(alice); vm.expectRevert("WF: insufficient hashrate"); fund.withdraw(WBTC_1 + 1);
     }
 
     function test_withdraw_partialWithdraw() public {
@@ -477,23 +428,19 @@ contract WaveSendFund_YieldAccrual is WaveSendFundBase {
     }
 
     function test_getPendingYield_linearlyScalesWithHashrate() public {
-        router.setWbtcOut(2 * WBTC_1);
-        _deposit(bob);
-        _skip(PERIOD);
+        router.setWbtcOut(2 * WBTC_1); _deposit(bob); _skip(PERIOD);
         assertApproxEqAbs(fund.getPendingYield(bob), fund.getPendingYield(alice) * 2, 20);
     }
 
     function test_yieldStopsAccruingAfterFullWithdraw() public {
-        _skip(PERIOD / 2);
-        vm.prank(alice); fund.withdraw(WBTC_1);
+        _skip(PERIOD / 2); vm.prank(alice); fund.withdraw(WBTC_1);
         uint256 snap = fund.getPendingYield(alice);
         _skip(PERIOD);
         assertEq(fund.getPendingYield(alice), snap);
     }
 
     function test_setRewardPreference_snapshotsYield() public {
-        _skip(PERIOD / 2);
-        vm.prank(alice); fund.setRewardPreference(true);
+        _skip(PERIOD / 2); vm.prank(alice); fund.setRewardPreference(true);
         (,,,, uint256 pending,,) = fund.userInfo(alice);
         assertApproxEqAbs(pending, _expectedYield(WBTC_1, PERIOD / 2), 10);
     }
@@ -505,7 +452,7 @@ contract WaveSendFund_YieldAccrual is WaveSendFundBase {
 }
 
 // =============================================================================
-//  SECTION 6 – CLAIM (all three branches)
+//  SECTION 6 – CLAIM
 // =============================================================================
 
 contract WaveSendFund_Claim is WaveSendFundBase {
@@ -566,42 +513,39 @@ contract WaveSendFund_Claim is WaveSendFundBase {
 
     function test_claim_branchB_fallbackToWsnd() public {
         WaveSendFund impl2 = new WaveSendFund();
-        WaveSendFund fund2 = WaveSendFund(address(new ERC1967Proxy(address(impl2),
+        WaveSendFund fund2 = WaveSendFund(payable(address(new ERC1967Proxy(address(impl2),
             abi.encodeCall(WaveSendFund.initialize,
-                (admin, address(usdtToken), address(wbtcToken), address(wsndToken), address(router), POOL_FEE)))));
+                (admin, address(usdtToken), address(wbtcToken), address(wsndToken),
+                 address(router), POOL_FEE, NATIVE_FEE))))));
 
         wsndToken.mint(address(fund2), WSND_LARGE);
-
         usdtToken.mint(alice, USDT_1K);
         vm.prank(alice); usdtToken.approve(address(fund2), type(uint256).max);
         router.setWbtcOut(WBTC_1);
         vm.prank(alice); fund2.deposit(USDT_1K, 1);
 
-        // Burn all WBTC from fund2 so pool WBTC == 0 → branch B fires.
         wbtcToken.burn(address(fund2), wbtcToken.balanceOf(address(fund2)));
-
         _skip(PERIOD);
 
         uint256 pending    = fund2.getPendingYield(alice);
         uint256 wsndBefore = wsndToken.balanceOf(alice);
         vm.prank(alice); fund2.claim();
 
-        uint256 wsndExpected = (pending * WSND_UNIT) / WBTC_UNIT;
-        assertApproxEqAbs(wsndToken.balanceOf(alice), wsndBefore + wsndExpected, 1e14);
+        assertApproxEqAbs(wsndToken.balanceOf(alice),
+            wsndBefore + (pending * WSND_UNIT) / WBTC_UNIT, 1e14);
     }
 
     function test_claim_revertsNothingToClaim() public {
         vm.prank(alice); fund.claim();
-        vm.prank(alice);
-        vm.expectRevert("WF: nothing to claim");
-        fund.claim();
+        vm.prank(alice); vm.expectRevert("WF: nothing to claim"); fund.claim();
     }
 
     function test_claim_revertsInsufficientWsndOnBranchA() public {
         WaveSendFund impl2 = new WaveSendFund();
-        WaveSendFund fund2 = WaveSendFund(address(new ERC1967Proxy(address(impl2),
+        WaveSendFund fund2 = WaveSendFund(payable(address(new ERC1967Proxy(address(impl2),
             abi.encodeCall(WaveSendFund.initialize,
-                (admin, address(usdtToken), address(wbtcToken), address(wsndToken), address(router), POOL_FEE)))));
+                (admin, address(usdtToken), address(wbtcToken), address(wsndToken),
+                 address(router), POOL_FEE, NATIVE_FEE))))));
 
         usdtToken.mint(alice, USDT_1K);
         vm.prank(alice); usdtToken.approve(address(fund2), type(uint256).max);
@@ -610,9 +554,7 @@ contract WaveSendFund_Claim is WaveSendFundBase {
         vm.prank(alice); fund2.setRewardPreference(true);
         _skip(PERIOD);
 
-        vm.prank(alice);
-        vm.expectRevert("WF: insufficient WSND");
-        fund2.claim();
+        vm.prank(alice); vm.expectRevert("WF: insufficient WSND"); fund2.claim();
     }
 }
 
@@ -630,8 +572,7 @@ contract WaveSendFund_RewardPreference is WaveSendFundBase {
 
     function test_setRewardPreference_togglesToFalse() public {
         vm.startPrank(alice);
-        fund.setRewardPreference(true);
-        fund.setRewardPreference(false);
+        fund.setRewardPreference(true); fund.setRewardPreference(false);
         vm.stopPrank();
         (,,,,,, bool pref) = fund.userInfo(alice);
         assertFalse(pref);
@@ -646,18 +587,17 @@ contract WaveSendFund_RewardPreference is WaveSendFundBase {
 }
 
 // =============================================================================
-//  SECTION 8 – FUND DEPOSIT (company liquidity)
+//  SECTION 8 – FUND DEPOSIT
 // =============================================================================
 
 contract WaveSendFund_FundDeposit is WaveSendFundBase {
 
     function test_fundDeposit_increasesContractBalance() public {
-        uint256 amt = 5 * WBTC_1;
-        wbtcToken.mint(admin, amt);
-        vm.prank(admin); wbtcToken.approve(address(fund), amt);
+        wbtcToken.mint(admin, 5 * WBTC_1);
+        vm.prank(admin); wbtcToken.approve(address(fund), 5 * WBTC_1);
         uint256 before = wbtcToken.balanceOf(address(fund));
-        vm.prank(admin); fund.fundDeposit(address(wbtcToken), amt);
-        assertEq(wbtcToken.balanceOf(address(fund)), before + amt);
+        vm.prank(admin); fund.fundDeposit(address(wbtcToken), 5 * WBTC_1);
+        assertEq(wbtcToken.balanceOf(address(fund)), before + 5 * WBTC_1);
     }
 
     function test_fundDeposit_doesNotChangeUserHashrate() public {
@@ -677,12 +617,11 @@ contract WaveSendFund_FundDeposit is WaveSendFundBase {
     }
 
     function test_fundDeposit_acceptsWsnd() public {
-        uint256 amount = 500e18;
-        wsndToken.mint(admin, amount);
-        vm.prank(admin); wsndToken.approve(address(fund), amount);
+        wsndToken.mint(admin, 500e18);
+        vm.prank(admin); wsndToken.approve(address(fund), 500e18);
         uint256 before = wsndToken.balanceOf(address(fund));
-        vm.prank(admin); fund.fundDeposit(address(wsndToken), amount);
-        assertEq(wsndToken.balanceOf(address(fund)), before + amount);
+        vm.prank(admin); fund.fundDeposit(address(wsndToken), 500e18);
+        assertEq(wsndToken.balanceOf(address(fund)), before + 500e18);
     }
 
     function test_fundDeposit_anyoneCanCall() public {
@@ -701,15 +640,11 @@ contract WaveSendFund_FundDeposit is WaveSendFundBase {
     }
 
     function test_fundDeposit_revertsZeroToken() public {
-        vm.prank(admin);
-        vm.expectRevert("WF: zero token");
-        fund.fundDeposit(address(0), WBTC_1);
+        vm.prank(admin); vm.expectRevert("WF: zero token"); fund.fundDeposit(address(0), WBTC_1);
     }
 
     function test_fundDeposit_revertsZeroAmount() public {
-        vm.prank(admin);
-        vm.expectRevert("WF: zero amount");
-        fund.fundDeposit(address(wbtcToken), 0);
+        vm.prank(admin); vm.expectRevert("WF: zero amount"); fund.fundDeposit(address(wbtcToken), 0);
     }
 }
 
@@ -737,76 +672,66 @@ contract WaveSendFund_OperationalWithdraw is WaveSendFundBase {
     }
 
     function test_opWithdraw_updatesWithdrawnInWindow() public {
-        uint256 tenPct = poolWbtc / 10;
-        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), tenPct, treasury);
+        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), poolWbtc / 10, treasury);
         (, uint256 withdrawn,,,) = fund.getWithdrawStatus(address(wbtcToken));
-        assertEq(withdrawn, tenPct);
+        assertEq(withdrawn, poolWbtc / 10);
     }
 
     function test_opWithdraw_twoPartialCallsWithinWindow() public {
-        uint256 fivePct = poolWbtc / 20;
-        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), fivePct, treasury);
-        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), fivePct, treasury);
-        assertEq(wbtcToken.balanceOf(treasury), fivePct * 2);
+        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), poolWbtc / 20, treasury);
+        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), poolWbtc / 20, treasury);
+        assertEq(wbtcToken.balanceOf(treasury), poolWbtc / 10);
     }
 
     function test_opWithdraw_emitsEvent() public {
-        uint256 tenPct = poolWbtc / 10;
         vm.prank(admin);
         vm.expectEmit(true, false, false, false);
-        emit WaveSendFund.OperationalWithdrawn(address(wbtcToken), tenPct, 0, 0, 0);
-        fund.operationalWithdraw(address(wbtcToken), tenPct, treasury);
+        emit WaveSendFund.OperationalWithdrawn(address(wbtcToken), poolWbtc / 10, 0, 0, 0);
+        fund.operationalWithdraw(address(wbtcToken), poolWbtc / 10, treasury);
     }
 
     function test_opWithdraw_newWindowAfter30Days_allowsAnotherTenPct() public {
-        uint256 tenPct = poolWbtc / 10;
-        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), tenPct, treasury);
+        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), poolWbtc / 10, treasury);
         _skip(PERIOD + 1);
         uint256 newBal = wbtcToken.balanceOf(address(fund));
         vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), newBal / 10, treasury);
-        assertEq(wbtcToken.balanceOf(treasury), tenPct + newBal / 10);
+        assertEq(wbtcToken.balanceOf(treasury), poolWbtc / 10 + newBal / 10);
     }
 
     function test_opWithdraw_windowStatus_remainingDecrements() public {
-        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), poolWbtc / 10 / 2, treasury);
+        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), poolWbtc / 20, treasury);
         (,, uint256 allowance, uint256 remaining,) = fund.getWithdrawStatus(address(wbtcToken));
         assertApproxEqAbs(remaining, allowance / 2, 1);
     }
 
     function test_opWithdraw_revertsMoreThanTenPercent() public {
-        vm.prank(admin);
-        vm.expectRevert("WF: exceeds monthly 10% cap");
+        vm.prank(admin); vm.expectRevert("WF: exceeds monthly 10% cap");
         fund.operationalWithdraw(address(wbtcToken), poolWbtc / 10 + 1, treasury);
     }
 
     function test_opWithdraw_revertsExhaustedAllowance() public {
         vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), poolWbtc / 10, treasury);
-        vm.prank(admin);
-        vm.expectRevert("WF: monthly allowance exhausted");
+        vm.prank(admin); vm.expectRevert("WF: monthly allowance exhausted");
         fund.operationalWithdraw(address(wbtcToken), 1, treasury);
     }
 
     function test_opWithdraw_revertsNonOperator() public {
-        vm.prank(alice);
-        vm.expectRevert();
+        vm.prank(alice); vm.expectRevert();
         fund.operationalWithdraw(address(wbtcToken), 1, treasury);
     }
 
     function test_opWithdraw_revertsZeroToken() public {
-        vm.prank(admin);
-        vm.expectRevert("WF: zero token");
+        vm.prank(admin); vm.expectRevert("WF: zero token");
         fund.operationalWithdraw(address(0), 1, treasury);
     }
 
     function test_opWithdraw_revertsZeroAmount() public {
-        vm.prank(admin);
-        vm.expectRevert("WF: zero amount");
+        vm.prank(admin); vm.expectRevert("WF: zero amount");
         fund.operationalWithdraw(address(wbtcToken), 0, treasury);
     }
 
     function test_opWithdraw_revertsZeroRecipient() public {
-        vm.prank(admin);
-        vm.expectRevert("WF: zero recipient");
+        vm.prank(admin); vm.expectRevert("WF: zero recipient");
         fund.operationalWithdraw(address(wbtcToken), 1, address(0));
     }
 
@@ -862,7 +787,7 @@ contract WaveSendFund_GetWithdrawStatus is WaveSendFundBase {
 }
 
 // =============================================================================
-//  SECTION 11 – FULL LIFECYCLE INTEGRATION
+//  SECTION 11 – LIFECYCLE
 // =============================================================================
 
 contract WaveSendFund_Lifecycle is WaveSendFundBase {
@@ -896,8 +821,7 @@ contract WaveSendFund_Lifecycle is WaveSendFundBase {
 
     function test_lifecycle_twoUsersIndependentYield() public {
         _deposit(alice);
-        router.setWbtcOut(2 * WBTC_1);
-        _deposit(bob);
+        router.setWbtcOut(2 * WBTC_1); _deposit(bob);
         _skip(PERIOD);
         assertApproxEqAbs(fund.getPendingYield(bob), fund.getPendingYield(alice) * 2, 20);
         vm.prank(alice); fund.claim();
@@ -911,19 +835,14 @@ contract WaveSendFund_Lifecycle is WaveSendFundBase {
         vm.prank(admin); wbtcToken.approve(address(fund), 5 * WBTC_1);
         vm.prank(admin); fund.fundDeposit(address(wbtcToken), 5 * WBTC_1);
         uint256 poolBal = wbtcToken.balanceOf(address(fund));
-        uint256 tenPct  = poolBal / 10;
-        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), tenPct, treasury);
-        assertEq(wbtcToken.balanceOf(treasury), tenPct);
-        assertEq(wbtcToken.balanceOf(address(fund)), poolBal - tenPct);
+        vm.prank(admin); fund.operationalWithdraw(address(wbtcToken), poolBal / 10, treasury);
+        assertEq(wbtcToken.balanceOf(treasury), poolBal / 10);
+        assertEq(wbtcToken.balanceOf(address(fund)), poolBal - poolBal / 10);
     }
 
     function test_lifecycle_yieldAccruesAcrossMultipleDeposits() public {
-        _deposit(alice);
-        _skip(PERIOD / 2);
-        _deposit(alice);
-        _skip(PERIOD / 2);
-        uint256 pending = fund.getPendingYield(alice);
-        assertApproxEqAbs(pending,
+        _deposit(alice); _skip(PERIOD / 2); _deposit(alice); _skip(PERIOD / 2);
+        assertApproxEqAbs(fund.getPendingYield(alice),
             _expectedYield(WBTC_1, PERIOD / 2) + _expectedYield(2 * WBTC_1, PERIOD / 2), 20);
     }
 }
@@ -937,9 +856,7 @@ contract WaveSendFund_Reentrancy is WaveSendFundBase {
     function test_reentrancyGuard_claimIsProtected() public {
         _deposit(alice); _skip(PERIOD);
         vm.prank(alice); fund.claim();
-        vm.prank(alice);
-        vm.expectRevert("WF: nothing to claim");
-        fund.claim();
+        vm.prank(alice); vm.expectRevert("WF: nothing to claim"); fund.claim();
     }
 
     function test_reentrancyGuard_depositIsProtected() public {
@@ -962,8 +879,7 @@ contract WaveSendFund_Fuzz is WaveSendFundBase {
     function testFuzz_operationalWithdraw_neverExceedsTenPercent(uint256 amount) public {
         uint256 poolBal = wbtcToken.balanceOf(address(fund));
         vm.assume(amount > poolBal / 10 && amount <= poolBal);
-        vm.prank(admin);
-        vm.expectRevert("WF: exceeds monthly 10% cap");
+        vm.prank(admin); vm.expectRevert("WF: exceeds monthly 10% cap");
         fund.operationalWithdraw(address(wbtcToken), amount, treasury);
     }
 
@@ -979,5 +895,124 @@ contract WaveSendFund_Fuzz is WaveSendFundBase {
         uint256 before = wbtcToken.balanceOf(address(fund));
         vm.prank(alice); fund.fundDeposit(address(wbtcToken), amount);
         assertEq(wbtcToken.balanceOf(address(fund)), before + amount);
+    }
+}
+
+// =============================================================================
+//  SECTION 14 – DEPOSIT NATIVE
+// =============================================================================
+
+contract WaveSendFund_DepositNative is WaveSendFundBase {
+
+    function setUp() public override {
+        super.setUp();
+        vm.deal(alice, 10 ether);
+        vm.deal(bob,   10 ether);
+    }
+
+    function test_depositNative_creditsHashrate() public {
+        vm.prank(alice); fund.depositNative{value: 1 ether}(1);
+        (uint256 hashrate,,,,,, ) = fund.userInfo(alice);
+        assertEq(hashrate, WBTC_1);
+    }
+
+    function test_depositNative_updatesTotalPoolHashrate() public {
+        vm.prank(alice); fund.depositNative{value: 1 ether}(1);
+        assertEq(fund.totalPoolHashrate(), WBTC_1);
+    }
+
+    function test_depositNative_updatesTotalDeposited() public {
+        vm.prank(alice); fund.depositNative{value: 1 ether}(1);
+        (, uint256 totalDep,,,,,) = fund.userInfo(alice);
+        assertEq(totalDep, WBTC_1);
+    }
+
+    function test_depositNative_setsLastUpdateTimestamp() public {
+        uint256 before = block.timestamp;
+        vm.prank(alice); fund.depositNative{value: 1 ether}(1);
+        (,,,,,uint256 ts,) = fund.userInfo(alice);
+        assertEq(ts, before);
+    }
+
+    function test_depositNative_emitsEvent() public {
+        vm.prank(alice);
+        vm.expectEmit(true, false, false, true);
+        emit WaveSendFund.NativeDeposited(alice, 1 ether, WBTC_1);
+        fund.depositNative{value: 1 ether}(1);
+    }
+
+    function test_depositNative_accumulatesWithUsdtDeposit() public {
+        _deposit(alice);
+        vm.prank(alice); fund.depositNative{value: 1 ether}(1);
+        (uint256 hashrate,,,,,, ) = fund.userInfo(alice);
+        assertEq(hashrate, 2 * WBTC_1);
+        assertEq(fund.totalPoolHashrate(), 2 * WBTC_1);
+    }
+
+    function test_depositNative_snapshotsPendingYield() public {
+        _deposit(alice); _skip(PERIOD);
+        vm.prank(alice); fund.depositNative{value: 1 ether}(1);
+        (,,,, uint256 pending,,) = fund.userInfo(alice);
+        assertApproxEqAbs(pending, 1_000_000, 10);
+    }
+
+    function test_depositNative_twoUsers_independentHashrates() public {
+        vm.prank(alice); fund.depositNative{value: 1 ether}(1);
+        router.setWbtcOutNative(2 * WBTC_1);
+        vm.prank(bob); fund.depositNative{value: 1 ether}(1);
+        (uint256 hA,,,,,, ) = fund.userInfo(alice);
+        (uint256 hB,,,,,, ) = fund.userInfo(bob);
+        assertEq(hA, WBTC_1);
+        assertEq(hB, 2 * WBTC_1);
+    }
+
+    function test_depositNative_revertsZeroValue() public {
+        vm.prank(alice); vm.expectRevert("WF: zero native");
+        fund.depositNative{value: 0}(1);
+    }
+
+    function test_depositNative_revertsZeroMinOut() public {
+        vm.prank(alice); vm.expectRevert("WF: zero min out");
+        fund.depositNative{value: 1 ether}(0);
+    }
+
+    function test_depositNative_revertsSlippage() public {
+        router.setWbtcOutNative(0);
+        vm.prank(alice); vm.expectRevert("MockRouter: native slippage");
+        fund.depositNative{value: 1 ether}(WBTC_1);
+    }
+
+    function test_depositNative_revertsWhenNativeFeeNotSet() public {
+        WaveSendFund impl2 = new WaveSendFund();
+        WaveSendFund fund2 = WaveSendFund(payable(address(new ERC1967Proxy(address(impl2),
+            abi.encodeCall(WaveSendFund.initialize,
+                (admin, address(usdtToken), address(wbtcToken), address(wsndToken),
+                 address(router), POOL_FEE, 0))))));
+        vm.prank(alice); vm.expectRevert("WF: native fee not set");
+        fund2.depositNative{value: 1 ether}(1);
+    }
+
+    function test_setNativeFee_updatesValue() public {
+        vm.prank(admin); fund.setNativeFee(500);
+        assertEq(fund.nativeFee(), 500);
+    }
+
+    function test_setNativeFee_emitsEvent() public {
+        vm.prank(admin);
+        vm.expectEmit(false, false, false, true);
+        emit WaveSendFund.NativeFeeUpdated(500);
+        fund.setNativeFee(500);
+    }
+
+    function test_setNativeFee_revertsNonOperator() public {
+        vm.prank(alice); vm.expectRevert(); fund.setNativeFee(500);
+    }
+
+    function test_receive_triggersDepositNative() public {
+        uint256 hashrateBefore = fund.totalPoolHashrate();
+        vm.deal(address(this), 1 ether);
+        (bool ok,) = address(fund).call{value: 1 ether}("");
+        assertTrue(ok);
+        assertEq(fund.totalPoolHashrate(), hashrateBefore + WBTC_1);
     }
 }

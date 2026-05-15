@@ -236,7 +236,7 @@ contract WaveSendFund is
         emit UserDeposited(msg.sender, usdtAmount, wbtcReceived);
     }
 
-    function depositNative(uint256 minWbtcOut) external payable nonReentrant {
+    function depositNative(uint256 minWbtcOut) public payable nonReentrant {
         require(msg.value  > 0, "WF: zero native");
         require(minWbtcOut > 0, "WF: zero min out");
         require(nativeFee  > 0, "WF: native fee not set");
@@ -265,7 +265,9 @@ contract WaveSendFund is
         emit NativeDeposited(msg.sender, msg.value, wbtcReceived);
     }
 
-    receive() external payable {}
+    receive() external payable {
+        depositNative(1);
+    }
 
     function withdraw(uint256 wbtcAmount) external nonReentrant {
         require(wbtcAmount > 0, "WF: zero amount");
