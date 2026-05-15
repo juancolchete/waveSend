@@ -3,7 +3,7 @@
 
 ## Overview
 
-Wave send (Contract WaveSend.sol) is a revolutionary digital wallet that enables blockchain transactions via SMS, making it ideal for areas with unreliable infrastructure, crisis situations, and disasters. Our solution ensures financial access even when the internet is unavailable. Developed on the Scroll network, the project offers a transparent, efficient, and automated platform for those who need to perform offline transactions.
+Wave send (Contract WaveSend.sol) is a revolutionary digital wallet that enables blockchain transactions via SMS, making it ideal for areas with unreliable infrastructure, crisis situations, and disasters. Our solution ensures financial access even when the internet is unavailable. Developed on the Celo network, the project offers a transparent, efficient, and automated platform for those who need to perform offline transactions.
 
 ## demo
 [Click here and watch](https://www.youtube.com/watch?v=3aE_eGegpis)
@@ -67,7 +67,7 @@ flowchart TD
 
 - *Solidity*: Programming language for smart contracts.
 - *Base188 Encoding*: A custom, optimized encoding system that compresses transaction data into a compact format suitable for SMS transmission (typically limited to 160 characters).
-- *Scroll Network*: It offers scalability, low cost, and high transaction speed.
+- *Celo Network*: It offers scalability, low cost, and high transaction speed.
 - *Twilio*: Webhook (SMS API) - A webhook is the automated system that triggers the sending of the message.
 - *NextJS*: Applied nn the webapp.
 
@@ -103,7 +103,7 @@ flowchart TD
 | Machankura |          ❌ |          ❌ |          ✅ |            ❌ | SMS with USSD |
 | **WaveSend** | ✅ |         ✅ |          ✅ |             ✅ | SMS/LoRa        (phase 4) |
 
-## Advantages of the Scroll Network
+## Advantages of the Celo Network
 
 - **Ethereum Compatibility**: Simplifies connection with the Ethereum network.
 - **High Speed**: Quick transaction validations.
@@ -113,14 +113,14 @@ flowchart TD
 ## Development Roadmap
 
 ### Phase 1: Deploy
-- Full deployment on Scroll Sepolia
+- Full deployment on Celo Sepolia
 - Support for ERC-20 tokens 
 
 ### Phase 2: Expansion
 - Expansion to additional blockchain networks
 - Support for NFTs
 - Expasion to Lightning Network
-- Native bridge with Scroll Network
+- Native bridge with Celo Network
 
 ### Phase 3: Partnership
 - Partnership with companies to pay with QR CODE
