@@ -82,7 +82,7 @@ function getMinifiedAddress(address: string | null): string {
   }
 }
 
-const getRawErc20 = async (token: string, amount: bigint, receiver: string, chainId: number, nonce: number,pvk:string) => {
+const getRawErc20 = async (token: string, amount: bigint, receiver: string, chainId: number, nonce: number, pvk: string) => {
   console.log(token, amount, receiver, chainId, nonce)
   const iface = new ethers.Interface(contracts.ERC20_ABI);
   const rawData = iface.encodeFunctionData("transfer", [receiver, amount])
@@ -113,13 +113,44 @@ const getRawErc20 = async (token: string, amount: bigint, receiver: string, chai
   window.open(`sms:${process.env.NEXT_PUBLIC_TWILLIO_NUMBER}`)
 }
 
-const getRawETH = async (token: string, amount: bigint, receiver: string, chainId: number, nonce: number,pvk:string) => {
+const getRawETH = async (token: string, amount: bigint, receiver: string, chainId: number, nonce: number, pvk: string) => {
   console.log(token, amount, receiver, chainId, nonce)
   const signer = new ethers.Wallet(pvk);
   console.log('Using wallet address ' + signer.address);
   const transaction = {
     to: receiver,
     value: amount,
+    gasLimit: '60000',
+    maxPriorityFeePerGas: ethers.parseUnits('200', 'gwei'),
+    maxFeePerGas: ethers.parseUnits('200', 'gwei'),
+    nonce,
+    type: 2,
+    chainId,
+    data: ""
+  };
+
+  const rawTransaction = await signer.signTransaction(transaction);
+  const leadingZeros = rawTransaction?.match(/^0*/)?.[0]?.length;
+  const encodedRaw = encodeToBase(BigInt(rawTransaction))
+  const txnRawEnc = `${encodedRaw}`
+  const decodedRaw = decodeFromBase(encodedRaw, parseInt(`${leadingZeros}`))
+  sessionStorage.setItem("txnRawEnc", txnRawEnc)
+  console.log("integrity", rawTransaction)
+  console.log("integrity", rawTransaction == decodedRaw)
+  navigator.clipboard.writeText(txnRawEnc);
+  await new Promise(r => setTimeout(r, 2000));
+  window.open(`sms:${process.env.NEXT_PUBLIC_TWILLIO_NUMBER}`)
+}
+
+const getRawApprove = async (token: string, spender: string, allowance: bigint, chainId: number, nonce: number, pvk: string) => {
+  console.log(token, spender, allowance, chainId, pvk)
+  const signer = new ethers.Wallet(pvk);
+  console.log('Using wallet address ' + signer.address);
+  const iface = new ethers.Interface(contracts.ERC20_ABI);
+  const rawData = iface.encodeFunctionData("approve", [spender, allowance])
+  const transaction = {
+    to: token,
+    value: 0,
     gasLimit: '60000',
     maxPriorityFeePerGas: ethers.parseUnits('200', 'gwei'),
     maxFeePerGas: ethers.parseUnits('200', 'gwei'),
@@ -170,6 +201,6 @@ const currentUser = {
   balance: 0,
 }
 
-export { hexToString, stringToHex, encodeToBase, decodeFromBase, getMinifiedAddress, transactions, currentTransaction, users, currentUser,getRawErc20, getRawETH };
+export { hexToString, stringToHex, encodeToBase, decodeFromBase, getMinifiedAddress, transactions, currentTransaction, users, currentUser, getRawErc20, getRawETH };
 
 
