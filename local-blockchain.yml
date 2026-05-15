@@ -4,7 +4,7 @@ services:
     container_name: local-anvil
     ports:
       - "8545:8545"
-    entrypoint: ["anvil", "--host", "0.0.0.0", "--allow-origin", "*","--fork-url","https://forno.celo.org"]
+    entrypoint: ["anvil", "--host", "0.0.0.0", "--allow-origin", "*","--fork-url","https://forno.celo.org","--gas-price", "200000000000"]
 
   otterscan:
     image: otterscan/otterscan:latest
