@@ -42,7 +42,7 @@ next-env.d.ts
 
 # direnv
 .direnv
-
+broadcast
 # Compiler files
 cache/
 out/
