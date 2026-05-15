@@ -30,7 +30,8 @@ import {WaveSendFund} from "../src/WaveSendFund.sol";
  *   CELO_WBTC_ADDRESS      -- Celo bridged WBTC token (8 decimals)
  *   WSND_ADDRESS           -- WaveSend Token (18 decimals)
  *   UNISWAP_V3_ROUTER      -- Uniswap V3 SwapRouter on Celo
- *   POOL_FEE               -- Uniswap V3 fee tier (e.g. 500 = 0.05%)
+ *   POOL_FEE               -- Uniswap V3 fee tier for USDT->WBTC (e.g. 500 = 0.05%)
+ *   NATIVE_FEE             -- Uniswap V3 fee tier for native->WBTC (e.g. 3000 = 0.3%)
  */
 contract DeployWaveSendFund is Script {
 
@@ -48,6 +49,7 @@ contract DeployWaveSendFund is Script {
         address wsnd      = vm.envAddress("WSND_ADDRESS");
         address router    = vm.envAddress("UNISWAP_V3_ROUTER");
         uint24  poolFee   = uint24(vm.envUint("POOL_FEE"));
+        uint24  nativeFee = uint24(vm.envUint("NATIVE_FEE"));
 
         // ── Sanity checks ────────────────────────────────────────────────────
         require(admin   != address(0), "Deploy: zero admin");
@@ -66,6 +68,7 @@ contract DeployWaveSendFund is Script {
         console.log("WSND         :", wsnd);
         console.log("Router       :", router);
         console.log("Pool fee     :", poolFee);
+        console.log("Native fee   :", nativeFee);
 
         vm.startBroadcast(deployerKey);
 
@@ -76,7 +79,7 @@ contract DeployWaveSendFund is Script {
         // 2. Encode initializer call
         bytes memory initData = abi.encodeCall(
             WaveSendFund.initialize,
-            (admin, usdt, wbtc, wsnd, router, poolFee)
+            (admin, usdt, wbtc, wsnd, router, poolFee, nativeFee)
         );
 
         // 3. Deploy UUPS proxy (implementation + initializer in one tx)
@@ -90,7 +93,7 @@ contract DeployWaveSendFund is Script {
         vm.stopBroadcast();
 
         // ── Post-deploy verification ─────────────────────────────────────────
-        _verify(admin, usdt, wbtc, wsnd, router, poolFee);
+        _verify(admin, usdt, wbtc, wsnd, router, poolFee, nativeFee);
     }
 
     /// @dev Read-only checks run after broadcast — reverts on any mismatch.
@@ -100,7 +103,8 @@ contract DeployWaveSendFund is Script {
         address wbtc,
         address wsnd,
         address router,
-        uint24  poolFee
+        uint24  poolFee,
+        uint24  nativeFee
     ) internal view {
         console.log("\n=== Post-deploy verification ===");
 
@@ -127,7 +131,8 @@ contract DeployWaveSendFund is Script {
 
         // Router & fee
         require(address(proxy.swapRouter()) == router,  "Verify: router mismatch");
-        require(proxy.poolFee()             == poolFee, "Verify: poolFee mismatch");
+        require(proxy.poolFee()   == poolFee,   "Verify: poolFee mismatch");
+        require(proxy.nativeFee() == nativeFee, "Verify: nativeFee mismatch");
         console.log("[OK] Router and pool fee");
 
         // Default ratio

@@ -72,10 +72,10 @@ contract WaveSendFund is
     //                          ROLES
     // ---------------------------------------------------------
 
-    /// @notice Can call admin setters and operationalWithdraw.
+    /// @notice Can grant/revoke all roles. Assigned to the admin address on init.
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
-    /// @notice Can authorise UUPS proxy upgrades.
+    /// @notice Can call admin setters and operationalWithdraw.
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
     // Note: DEFAULT_ADMIN_ROLE = 0x00 is inherited from AccessControl.
@@ -104,6 +104,9 @@ contract WaveSendFund is
     uint256 public wsndPerWbtc;
     uint256 public totalPoolHashrate;
     uint24  public poolFee;
+
+    /// @notice Uniswap V3 fee tier used for native token -> WBTC swaps (e.g. 3000 = 0.3%).
+    uint24  public nativeFee;
 
     // ---------------------------------------------------------
     //              OPERATIONAL WITHDRAWAL TRACKING
@@ -152,6 +155,8 @@ contract WaveSendFund is
     event WsndRatioUpdated(uint256 newWsndPerWbtc);
     event PoolFeeUpdated(uint24 newFee);
     event RouterUpdated(address newRouter);
+    event NativeFeeUpdated(uint24 newFee);
+    event NativeDeposited(address indexed user, uint256 nativeIn, uint256 wbtcReceived);
 
     // ---------------------------------------------------------
     //                       CONSTRUCTOR
@@ -181,7 +186,8 @@ contract WaveSendFund is
         address _wbtc,
         address _wsnd,
         address _router,
-        uint24  _poolFee
+        uint24  _poolFee,
+        uint24  _nativeFee
     ) external initializer {
         require(_admin  != address(0), "WF: zero admin");
         require(_usdt   != address(0), "WF: zero USDT");
@@ -192,6 +198,7 @@ contract WaveSendFund is
         __AccessControl_init();
         // ReentrancyGuard slot defaults to 0 (NOT_ENTERED) -- no init needed.
 
+        // Grant all roles to the admin address.
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(OPERATOR_ROLE,      _admin);
         _grantRole(UPGRADER_ROLE,      _admin);
@@ -201,6 +208,7 @@ contract WaveSendFund is
         wsnd        = IERC20(_wsnd);
         swapRouter  = ISwapRouter(_router);
         poolFee     = _poolFee;
+        nativeFee   = _nativeFee;
         wsndPerWbtc = WSND_UNIT;
     }
 
@@ -208,33 +216,47 @@ contract WaveSendFund is
     //                     UUPS AUTHORISATION
     // ---------------------------------------------------------
 
+    /// @dev Only UPGRADER_ROLE can push a new implementation.
     function _authorizeUpgrade(address) internal override onlyRole(UPGRADER_ROLE) {}
 
     // ---------------------------------------------------------
     //                     ADMIN SETTERS
     // ---------------------------------------------------------
 
+    /// @notice Update the WSND:WBTC face-value ratio. Requires OPERATOR_ROLE.
     function setWsndPerWbtc(uint256 _wsndPerWbtc) external onlyRole(OPERATOR_ROLE) {
         require(_wsndPerWbtc > 0, "WF: ratio zero");
         wsndPerWbtc = _wsndPerWbtc;
         emit WsndRatioUpdated(_wsndPerWbtc);
     }
 
+    /// @notice Update the Uniswap V3 fee tier. Requires OPERATOR_ROLE.
     function setPoolFee(uint24 _poolFee) external onlyRole(OPERATOR_ROLE) {
         poolFee = _poolFee;
         emit PoolFeeUpdated(_poolFee);
     }
 
+    /// @notice Replace the Uniswap V3 SwapRouter address. Requires OPERATOR_ROLE.
     function setSwapRouter(address _router) external onlyRole(OPERATOR_ROLE) {
         require(_router != address(0), "WF: zero router");
         swapRouter = ISwapRouter(_router);
         emit RouterUpdated(_router);
     }
 
+    /// @notice Update the Uniswap V3 fee tier for native token -> WBTC swaps. Requires OPERATOR_ROLE.
+    function setNativeFee(uint24 _nativeFee) external onlyRole(OPERATOR_ROLE) {
+        nativeFee = _nativeFee;
+        emit NativeFeeUpdated(_nativeFee);
+    }
+
     // ---------------------------------------------------------
     //              COMPANY LIQUIDITY FUNCTIONS
     // ---------------------------------------------------------
 
+    /**
+     * @notice Deposit any ERC-20 token as company liquidity (no yield accrual).
+     *         Open to any caller — typically the treasury multi-sig.
+     */
     function fundDeposit(address token, uint256 amount) external nonReentrant {
         require(token  != address(0), "WF: zero token");
         require(amount >  0,          "WF: zero amount");
@@ -242,6 +264,9 @@ contract WaveSendFund is
         emit FundDeposited(token, amount, msg.sender);
     }
 
+    /**
+     * @notice Withdraw up to 10 % of any token per 30-day window. Requires OPERATOR_ROLE.
+     */
     function operationalWithdraw(
         address token,
         uint256 amount,
@@ -273,6 +298,7 @@ contract WaveSendFund is
                                   window.withdrawnInWindow, windowAllowance);
     }
 
+    /// @notice View the current operational withdrawal status for a given token.
     function getWithdrawStatus(address token)
         external view
         returns (
@@ -309,29 +335,15 @@ contract WaveSendFund is
     //                    USER-FACING FUNCTIONS
     // ---------------------------------------------------------
 
+    /// @notice Toggle yield payout token between WBTC and WSND.
     function setRewardPreference(bool _prefersWSND) external {
         _updateYield(msg.sender);
         userInfo[msg.sender].prefersWSND = _prefersWSND;
         emit RewardPreferenceSet(msg.sender, _prefersWSND);
     }
 
-    function depositOne() public {
-      deposit(1 ether,100);
-    }
-
-    function depositTen() public {
-      deposit(10 ether,100);
-    }
-
-    function depositHun() public {
-      deposit(100 ether,100);
-    }
-
-    function depositDirect(uint256 usdtAmount) public{
-      deposit(usdtAmount,100);
-    }
-
-    function deposit(uint256 usdtAmount, uint256 minWbtcOut) public nonReentrant {
+    /// @notice Deposit USDT; it is swapped to WBTC and credited as Hashrate.
+    function deposit(uint256 usdtAmount, uint256 minWbtcOut) external nonReentrant {
         require(usdtAmount > 0, "WF: zero USDT");
         require(minWbtcOut > 0, "WF: zero min out");
 
@@ -362,6 +374,51 @@ contract WaveSendFund is
         emit UserDeposited(msg.sender, usdtAmount, wbtcReceived);
     }
 
+    /**
+     * @notice Deposit the blockchain native token (CELO on Celo Mainnet).
+     *         The native amount is forwarded directly to the Uniswap V3 router,
+     *         which wraps it and swaps it to WBTC. The received WBTC is credited
+     *         as Hashrate to the caller.
+     * @dev    The router must support ETH/native-token inputs via the payable
+     *         `exactInputSingle` path (standard on all Uniswap V3 deployments).
+     *         `msg.value` is the native amount; any unspent native is NOT refunded
+     *         by this contract — set `minWbtcOut` carefully.
+     * @param  minWbtcOut  Minimum WBTC to receive (slippage guard, 8-decimal units).
+     */
+    function depositNative(uint256 minWbtcOut) external payable nonReentrant {
+        require(msg.value  > 0, "WF: zero native");
+        require(minWbtcOut > 0, "WF: zero min out");
+        require(nativeFee  > 0, "WF: native fee not set");
+
+        _updateYield(msg.sender);
+
+        // Forward msg.value to the router — it handles wrapping internally.
+        uint256 wbtcReceived = swapRouter.exactInputSingle{value: msg.value}(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn:           address(0), // address(0) signals native token to the router
+                tokenOut:          address(wbtc),
+                fee:               nativeFee,
+                recipient:         address(this),
+                deadline:          block.timestamp,
+                amountIn:          msg.value,
+                amountOutMinimum:  minWbtcOut,
+                sqrtPriceLimitX96: 0
+            })
+        );
+
+        UserInfo storage user    = userInfo[msg.sender];
+        user.activeHashrate      += wbtcReceived;
+        user.totalDeposited      += wbtcReceived;
+        totalPoolHashrate        += wbtcReceived;
+        user.lastUpdateTimestamp  = block.timestamp;
+
+        emit NativeDeposited(msg.sender, msg.value, wbtcReceived);
+    }
+
+    /// @notice Accept plain native token transfers (e.g. refunds from the router).
+    receive() external payable {}
+
+    /// @notice Withdraw WBTC principal. Yield is synced but NOT auto-claimed.
     function withdraw(uint256 wbtcAmount) external nonReentrant {
         require(wbtcAmount > 0, "WF: zero amount");
 
@@ -378,6 +435,12 @@ contract WaveSendFund is
         emit UserWithdrawn(msg.sender, wbtcAmount);
     }
 
+    /**
+     * @notice Claim all accrued yield.
+     *         A) prefersWSND == true                         -> pay in WSND.
+     *         B) prefersWSND == false AND pool WBTC < reward -> fallback to WSND.
+     *         C) prefersWSND == false AND pool WBTC >= reward -> pay in WBTC.
+     */
     function claim() external nonReentrant {
         _updateYield(msg.sender);
 
@@ -415,6 +478,7 @@ contract WaveSendFund is
     //                       VIEW FUNCTIONS
     // ---------------------------------------------------------
 
+    /// @notice Total pending yield for `account` (accrued + unclaimed), in WBTC units.
     function getPendingYield(address account) external view returns (uint256) {
         UserInfo storage user = userInfo[account];
         return user.pendingRewards + _calculateYield(
@@ -423,6 +487,7 @@ contract WaveSendFund is
         );
     }
 
+    /// @notice Return the full UserInfo struct for `account`.
     function getUserInfo(address account) external view returns (UserInfo memory) {
         return userInfo[account];
     }
