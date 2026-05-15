@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useEffect, useState } from "react"
-import { Send, Wallet } from "lucide-react"
+import { Send, Wallet, Copy, Check } from "lucide-react"
 import contracts from "@/contracts.json"
 import { Button } from "./components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./components/ui/card"
@@ -38,6 +38,9 @@ export default function TransactionForm({ isWalletConnected = false, connectedTy
     name: "Celo",
     icon: "/celo.png?height=32&width=32",
   })
+  const [showConfirmation, setShowConfirmation] = useState(false)
+  const [smsMessage, setSmsMessage] = useState("")
+  const [copiedToClipboard, setCopiedToClipboard] = useState(false)
   const { toast } = useToast()
 
   const handleNetworkChange = (network: Network) => {
@@ -188,17 +191,9 @@ export default function TransactionForm({ isWalletConnected = false, connectedTy
         // Create transaction message
         const transactionMessage = `${txnRawEnc}`
 
-        // Copy to clipboard
-        await navigator.clipboard.writeText(transactionMessage)
-
-        toast({
-          title: "Transaction prepared",
-          description: `${amount} WSND will be sent to ${receiverWallet} on ${selectedNetwork.name} when connection is available. Details copied to clipboard.`,
-        })
-
-        // Reset form
-        setAmount("")
-        setReceiverWallet("")
+        // Show confirmation dialog instead of immediately opening SMS
+        setSmsMessage(transactionMessage)
+        setShowConfirmation(true)
       } catch (err) {
         toast({
           variant: "destructive",
@@ -213,7 +208,95 @@ export default function TransactionForm({ isWalletConnected = false, connectedTy
     }
   }
 
+  const handleCopySMS = async () => {
+    try {
+      await navigator.clipboard.writeText(smsMessage)
+      setCopiedToClipboard(true)
+      setTimeout(() => setCopiedToClipboard(false), 2000)
+      toast({
+        title: "Copied!",
+        description: "Message copied to clipboard",
+      })
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Copy failed",
+        description: "Could not copy message to clipboard",
+      })
+    }
+  }
+
+  const handleOpenSMS = () => {
+    window.open(`sms:${process.env.NEXT_PUBLIC_TWILLIO_NUMBER}`)
+    setShowConfirmation(false)
+  }
+
   return (
+    <>
+      {showConfirmation && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-sm">
+            <CardHeader>
+              <CardTitle>Confirm Transaction</CardTitle>
+              <CardDescription>Your transaction details are ready to send via SMS</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Transaction Code</Label>
+                <div className="relative">
+                  <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md border border-gray-200 dark:border-gray-800 break-all text-sm font-mono">
+                    {smsMessage.substring(0, 100)}
+                    {smsMessage.length > 100 && "..."}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-full"
+                    onClick={handleCopySMS}
+                  >
+                    {copiedToClipboard ? (
+                      <>
+                        <Check className="h-4 w-4 mr-2" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy to Clipboard
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3 text-sm text-blue-800 dark:text-blue-200">
+                This code will be sent via SMS to {process.env.NEXT_PUBLIC_TWILLIO_NUMBER}
+              </div>
+            </CardContent>
+            <CardFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowConfirmation(false)
+                  setAmount("")
+                  setReceiverWallet("")
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 bg-black hover:bg-gray-800 text-white"
+                onClick={handleOpenSMS}
+              >
+                Open SMS App
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
     <Card className="w-full max-w-md mx-auto">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
@@ -308,6 +391,7 @@ export default function TransactionForm({ isWalletConnected = false, connectedTy
         </CardFooter>
       </form>
     </Card>
+    </>
   )
 }
 
