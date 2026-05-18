@@ -419,7 +419,7 @@ contract WaveSendFund is
      *         by this contract — set `minWbtcOut` carefully.
      * @param  minWbtcOut  Minimum WBTC to receive (slippage guard, 8-decimal units).
      */
-    function depositNative(uint256 minWbtcOut) external payable nonReentrant {
+    function depositNative(uint256 minWbtcOut) public  payable nonReentrant {
         require(msg.value     > 0, "WF: zero native");
         require(minWbtcOut    > 0, "WF: zero min out");
         require(nativeFee     > 0, "WF: native fee not set");
