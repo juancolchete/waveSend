@@ -1,3 +1,4 @@
+docker compose -f ./local-blockchain.yml down
 source .env
 docker compose -f ./local-blockchain.yml up -d
 
