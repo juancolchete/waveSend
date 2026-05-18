@@ -34,7 +34,6 @@ import {WaveSendFund} from "../src/WaveSendFund.sol";
  *   NATIVE_FEE             -- Uniswap V3 fee tier for native->WBTC (e.g. 3000 = 0.3%)
  */
 contract DeployWaveSendFund is Script {
-
     // ── Deployment artifacts (populated during run) ──────────────────────────
     WaveSendFund public implementation;
     WaveSendFund public proxy;
@@ -42,22 +41,22 @@ contract DeployWaveSendFund is Script {
     function run() external {
         // ── Load env ─────────────────────────────────────────────────────────
         uint256 deployerKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-
-        address admin     = vm.envAddress("ADMIN_ADDRESS");
-        address usdt      = vm.envAddress("CELO_USDT_ADDRESS");
-        address wbtc      = vm.envAddress("CELO_WBTC_ADDRESS");
-        address wsnd      = vm.envAddress("WSND_ADDRESS");
-        address router    = vm.envAddress("UNISWAP_V3_ROUTER");
-        uint24  poolFee   = uint24(vm.envUint("POOL_FEE"));
-        uint24  nativeFee = uint24(vm.envUint("NATIVE_FEE"));
+        address admin = vm.envAddress("ADMIN_ADDRESS");
+        address usdt = vm.envAddress("CELO_USDT_ADDRESS");
+        address wbtc = vm.envAddress("CELO_WBTC_ADDRESS");
+        address wsnd = vm.envAddress("WSND_ADDRESS");
+        address router = vm.envAddress("UNISWAP_V3_ROUTER");
+        uint24 poolFee = uint24(vm.envUint("POOL_FEE"));
+        uint24 nativeFee = uint24(vm.envUint("NATIVE_FEE"));
+        uint24 nativeUsdtFee = uint24(vm.envUint("NATIVE_USDT_FEE"));
 
         // ── Sanity checks ────────────────────────────────────────────────────
-        require(admin   != address(0), "Deploy: zero admin");
-        require(usdt    != address(0), "Deploy: zero USDT");
-        require(wbtc    != address(0), "Deploy: zero WBTC");
-        require(wsnd    != address(0), "Deploy: zero WSND");
-        require(router  != address(0), "Deploy: zero router");
-        require(poolFee > 0,           "Deploy: zero poolFee");
+        require(admin != address(0), "Deploy: zero admin");
+        require(usdt != address(0), "Deploy: zero USDT");
+        require(wbtc != address(0), "Deploy: zero WBTC");
+        require(wsnd != address(0), "Deploy: zero WSND");
+        require(router != address(0), "Deploy: zero router");
+        require(poolFee > 0, "Deploy: zero poolFee");
 
         address deployer = vm.addr(deployerKey);
         console.log("=== WaveSendFund Deployment ===");
@@ -95,7 +94,16 @@ contract DeployWaveSendFund is Script {
         vm.stopBroadcast();
 
         // ── Post-deploy verification ─────────────────────────────────────────
-        _verify(admin, usdt, wbtc, wsnd, router, poolFee, nativeFee, nativeUsdtFee);
+        _verify(
+            admin,
+            usdt,
+            wbtc,
+            wsnd,
+            router,
+            poolFee,
+            nativeFee,
+            nativeUsdtFee
+        );
     }
 
     /// @dev Read-only checks run after broadcast — reverts on any mismatch.
@@ -105,9 +113,9 @@ contract DeployWaveSendFund is Script {
         address wbtc,
         address wsnd,
         address router,
-        uint24  poolFee,
-        uint24  nativeFee,
-        uint24  nativeUsdtFee
+        uint24 poolFee,
+        uint24 nativeFee,
+        uint24 nativeUsdtFee
     ) internal view {
         console.log("\n=== Post-deploy verification ===");
 
@@ -133,8 +141,11 @@ contract DeployWaveSendFund is Script {
         console.log("[OK] Token addresses");
 
         // Router & fee
-        require(address(proxy.swapRouter()) == router,  "Verify: router mismatch");
-        require(proxy.poolFee()   == poolFee,   "Verify: poolFee mismatch");
+        require(
+            address(proxy.swapRouter()) == router,
+            "Verify: router mismatch"
+        );
+        require(proxy.poolFee() == poolFee, "Verify: poolFee mismatch");
         require(proxy.nativeFee() == nativeFee, "Verify: nativeFee mismatch");
         console.log("[OK] Router and pool fee");
 
