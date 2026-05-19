@@ -431,7 +431,7 @@ contract WaveSendFund is
         // Uniswap V3 exactInput accepts native CELO via msg.value when the
         // first token in the path is the wrapped native (WCELO on Celo).
         bytes memory swapPath = Path.encode(
-            address(0),       // WCELO (address(0) = native, router wraps automatically)
+            0x471EcE3750Da237f93B8E339c536989b8978a438,       // WCELO (address(0) = native, router wraps automatically)
             nativeUsdtFee,    // CELO/USDT pool fee tier
             address(usdt),    // intermediate: USDT
             poolFee,          // USDT/WBTC pool fee tier
