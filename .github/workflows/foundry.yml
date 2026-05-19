@@ -1,0 +1,28 @@
+name: Foundry CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive # Crucial for pulling your lib/ folders
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Run Build
+        run: cd contracts && forge build
+
+      - name: Run Tests
+        run: cd contracts && forge test -vvv
+        
