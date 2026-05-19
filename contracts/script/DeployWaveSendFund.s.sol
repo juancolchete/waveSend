@@ -49,6 +49,8 @@ contract DeployWaveSendFund is Script {
         uint24 poolFee = uint24(vm.envUint("POOL_FEE"));
         uint24 nativeFee = uint24(vm.envUint("NATIVE_FEE"));
         uint24 nativeUsdtFee = uint24(vm.envUint("NATIVE_USDT_FEE"));
+        int24 poolFeeTickSpacing = uint24(vm.envUint("NATIVE_FEE_TICK_SPACING"));
+        int24 nativeUsdtFeeTickSpacing = uint24(vm.envUint("NATIVE_USDT_FEE_TICK_SPACING"));
 
         // ── Sanity checks ────────────────────────────────────────────────────
         require(admin != address(0), "Deploy: zero admin");
@@ -80,7 +82,7 @@ contract DeployWaveSendFund is Script {
         // 2. Encode initializer call
         bytes memory initData = abi.encodeCall(
             WaveSendFund.initialize,
-            (admin, usdt, wbtc, wsnd, router, poolFee, nativeFee, nativeUsdtFee)
+            (admin, usdt, wbtc, wsnd, router, poolFee,poolFeeTickSpacing, nativeFee, nativeUsdtFee,nativeUsdtFeeTickSpacing)
         );
 
         // 3. Deploy UUPS proxy (implementation + initializer in one tx)

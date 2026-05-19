@@ -5,44 +5,6 @@ pragma solidity ^0.8.30;
 //                        INTERFACES
 // =============================================================
 
-/// @notice Uniswap V3 SwapRouter interface – exactInputSingle only.
-interface ISwapRouter {
-    struct ExactInputSingleParams {
-        address tokenIn;
-        address tokenOut;
-        uint24  fee;
-        address recipient;
-        uint256 deadline;
-        uint256 amountIn;
-        uint256 amountOutMinimum;
-        uint160 sqrtPriceLimitX96;
-    }
-
-    struct ExactInputParams {
-        bytes   path;
-        address recipient;
-        uint256 deadline;
-        uint256 amountIn;
-        uint256 amountOutMinimum;
-    }
-
-    function exactInputSingle(ExactInputSingleParams calldata params)
-        external payable returns (uint256 amountOut);
-
-    function exactInput(ExactInputParams calldata params)
-        external payable returns (uint256 amountOut);
-}
-
-/// @notice Uniswap V3 path encoding helper.
-library Path {
-    /// @dev Encode a two-hop path: tokenA -feeAB-> tokenB -feeBC-> tokenC
-    function encode(address tokenA, uint24 feeAB, address tokenB, uint24 feeBC, address tokenC)
-        internal pure returns (bytes memory)
-    {
-        return abi.encodePacked(tokenA, feeAB, tokenB, feeBC, tokenC);
-    }
-}
-
 // =============================================================
 //               OpenZeppelin imports
 // =============================================================
@@ -53,6 +15,8 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
+import {IV4Router} from "v4-periphery/src/interfaces/IV4Router.sol";
 
 // =============================================================
 //                     WAVESEND FUND CONTRACT
@@ -106,33 +70,37 @@ contract WaveSendFund is
     //                        CONSTANTS
     // ---------------------------------------------------------
 
-    uint256 public constant PERIOD_30_DAYS   = 2_592_000;
-    uint256 public constant YIELD_RATE_NUM   = 100;
-    uint256 public constant YIELD_RATE_DEN   = 10_000;
+    uint256 public constant PERIOD_30_DAYS = 2_592_000;
+    uint256 public constant YIELD_RATE_NUM = 100;
+    uint256 public constant YIELD_RATE_DEN = 10_000;
     uint256 public constant MAX_WITHDRAW_BPS = 1_000;
-    uint256 public constant BPS_DENOM        = 10_000;
-    uint256 public constant WBTC_UNIT        = 1e8;
-    uint256 public constant WSND_UNIT        = 1e18;
+    uint256 public constant BPS_DENOM = 10_000;
+    uint256 public constant WBTC_UNIT = 1e8;
+    uint256 public constant WSND_UNIT = 1e18;
 
     // ---------------------------------------------------------
     //                      STATE VARIABLES
     // ---------------------------------------------------------
 
-    IERC20      public usdt;
-    IERC20      public wbtc;
-    IERC20      public wsnd;
-    ISwapRouter public swapRouter;
+    IERC20 public usdt;
+    IERC20 public wbtc;
+    IERC20 public wsnd;
+    IV4Router public swapRouter;
 
     uint256 public wsndPerWbtc;
     uint256 public totalPoolHashrate;
-    uint24  public poolFee;
+    uint24 public poolFee;
+    int24 public nativeUsdtTickSpacing;
+    address public nativeUsdtHook;
+    int24 public poolTickSpacing;
+    address public poolHook;
 
     /// @notice Uniswap V3 fee tier for the CELO -> USDT hop.
-    uint24  public nativeUsdtFee;
+    uint24 public nativeUsdtFee;
 
     /// @notice Uniswap V3 fee tier for the USDT -> WBTC hop (reuses poolFee).
     /// nativeFee kept as alias so existing setter/getter still works.
-    uint24  public nativeFee;
+    uint24 public nativeFee;
 
     // ---------------------------------------------------------
     //              OPERATIONAL WITHDRAWAL TRACKING
@@ -157,7 +125,7 @@ contract WaveSendFund is
         uint256 totalWsndClaimed;
         uint256 pendingRewards;
         uint256 lastUpdateTimestamp;
-        bool    prefersWSND;
+        bool prefersWSND;
     }
 
     mapping(address => UserInfo) public userInfo;
@@ -166,11 +134,24 @@ contract WaveSendFund is
     //                          EVENTS
     // ---------------------------------------------------------
 
-    event UserDeposited(address indexed user, uint256 usdtIn, uint256 wbtcReceived);
+    event UserDeposited(
+        address indexed user,
+        uint256 usdtIn,
+        uint256 wbtcReceived
+    );
     event UserWithdrawn(address indexed user, uint256 wbtcAmount);
-    event RewardClaimed(address indexed user, uint256 wbtcReward, uint256 wsndPaid, bool usedFallback);
+    event RewardClaimed(
+        address indexed user,
+        uint256 wbtcReward,
+        uint256 wsndPaid,
+        bool usedFallback
+    );
     event RewardPreferenceSet(address indexed user, bool prefersWSND);
-    event FundDeposited(address indexed token, uint256 amount, address indexed depositor);
+    event FundDeposited(
+        address indexed token,
+        uint256 amount,
+        address indexed depositor
+    );
     event OperationalWithdrawn(
         address indexed token,
         uint256 amount,
@@ -183,7 +164,11 @@ contract WaveSendFund is
     event RouterUpdated(address newRouter);
     event NativeFeeUpdated(uint24 newFee);
     event NativeUsdtFeeUpdated(uint24 newFee);
-    event NativeDeposited(address indexed user, uint256 nativeIn, uint256 wbtcReceived);
+    event NativeDeposited(
+        address indexed user,
+        uint256 nativeIn,
+        uint256 wbtcReceived
+    );
 
     // ---------------------------------------------------------
     //                       CONSTRUCTOR
@@ -213,14 +198,16 @@ contract WaveSendFund is
         address _wbtc,
         address _wsnd,
         address _router,
-        uint24  _poolFee,
-        uint24  _nativeFee,
-        uint24  _nativeUsdtFee
+        uint24 _poolFee,
+        int24 _poolTickSpacing,
+        uint24 _nativeFee,
+        uint24 _nativeUsdtFee,
+        int24 _nativeUsdtTickSpacing
     ) external initializer {
-        require(_admin  != address(0), "WF: zero admin");
-        require(_usdt   != address(0), "WF: zero USDT");
-        require(_wbtc   != address(0), "WF: zero WBTC");
-        require(_wsnd   != address(0), "WF: zero WSND");
+        require(_admin != address(0), "WF: zero admin");
+        require(_usdt != address(0), "WF: zero USDT");
+        require(_wbtc != address(0), "WF: zero WBTC");
+        require(_wsnd != address(0), "WF: zero WSND");
         require(_router != address(0), "WF: zero router");
 
         __AccessControl_init();
@@ -228,17 +215,19 @@ contract WaveSendFund is
 
         // Grant all roles to the admin address.
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
-        _grantRole(OPERATOR_ROLE,      _admin);
-        _grantRole(UPGRADER_ROLE,      _admin);
+        _grantRole(OPERATOR_ROLE, _admin);
+        _grantRole(UPGRADER_ROLE, _admin);
 
-        usdt        = IERC20(_usdt);
-        wbtc        = IERC20(_wbtc);
-        wsnd        = IERC20(_wsnd);
-        swapRouter  = ISwapRouter(_router);
-        poolFee       = _poolFee;
-        nativeFee     = _nativeFee;
+        usdt = IERC20(_usdt);
+        wbtc = IERC20(_wbtc);
+        wsnd = IERC20(_wsnd);
+        swapRouter = IV4Router(_router);
+        poolFee = _poolFee;
+        poolTickSpacing = _poolTickSpacing;
+        nativeFee = _nativeFee;
         nativeUsdtFee = _nativeUsdtFee;
-        wsndPerWbtc   = WSND_UNIT;
+        nativeUsdtTickSpacing = _nativeUsdtTickSpacing;
+        wsndPerWbtc = WSND_UNIT;
     }
 
     // ---------------------------------------------------------
@@ -246,14 +235,18 @@ contract WaveSendFund is
     // ---------------------------------------------------------
 
     /// @dev Only UPGRADER_ROLE can push a new implementation.
-    function _authorizeUpgrade(address) internal override onlyRole(UPGRADER_ROLE) {}
+    function _authorizeUpgrade(
+        address
+    ) internal override onlyRole(UPGRADER_ROLE) {}
 
     // ---------------------------------------------------------
     //                     ADMIN SETTERS
     // ---------------------------------------------------------
 
     /// @notice Update the WSND:WBTC face-value ratio. Requires OPERATOR_ROLE.
-    function setWsndPerWbtc(uint256 _wsndPerWbtc) external onlyRole(OPERATOR_ROLE) {
+    function setWsndPerWbtc(
+        uint256 _wsndPerWbtc
+    ) external onlyRole(OPERATOR_ROLE) {
         require(_wsndPerWbtc > 0, "WF: ratio zero");
         wsndPerWbtc = _wsndPerWbtc;
         emit WsndRatioUpdated(_wsndPerWbtc);
@@ -268,7 +261,7 @@ contract WaveSendFund is
     /// @notice Replace the Uniswap V3 SwapRouter address. Requires OPERATOR_ROLE.
     function setSwapRouter(address _router) external onlyRole(OPERATOR_ROLE) {
         require(_router != address(0), "WF: zero router");
-        swapRouter = ISwapRouter(_router);
+        swapRouter = IV4Router(_router);
         emit RouterUpdated(_router);
     }
 
@@ -278,7 +271,9 @@ contract WaveSendFund is
         emit NativeFeeUpdated(_nativeFee);
     }
 
-    function setNativeUsdtFee(uint24 _nativeUsdtFee) external onlyRole(OPERATOR_ROLE) {
+    function setNativeUsdtFee(
+        uint24 _nativeUsdtFee
+    ) external onlyRole(OPERATOR_ROLE) {
         nativeUsdtFee = _nativeUsdtFee;
         emit NativeUsdtFeeUpdated(_nativeUsdtFee);
     }
@@ -292,8 +287,8 @@ contract WaveSendFund is
      *         Open to any caller — typically the treasury multi-sig.
      */
     function fundDeposit(address token, uint256 amount) external nonReentrant {
-        require(token  != address(0), "WF: zero token");
-        require(amount >  0,          "WF: zero amount");
+        require(token != address(0), "WF: zero token");
+        require(amount > 0, "WF: zero amount");
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         emit FundDeposited(token, amount, msg.sender);
     }
@@ -306,35 +301,55 @@ contract WaveSendFund is
         uint256 amount,
         address recipient
     ) external nonReentrant onlyRole(OPERATOR_ROLE) {
-        require(token     != address(0), "WF: zero token");
-        require(amount    >  0,          "WF: zero amount");
+        require(token != address(0), "WF: zero token");
+        require(amount > 0, "WF: zero amount");
         require(recipient != address(0), "WF: zero recipient");
 
         WithdrawWindow storage window = withdrawWindows[token];
 
-        if (window.windowStart == 0 ||
-            block.timestamp >= window.windowStart + PERIOD_30_DAYS) {
-            window.windowStart       = block.timestamp;
+        if (
+            window.windowStart == 0 ||
+            block.timestamp >= window.windowStart + PERIOD_30_DAYS
+        ) {
+            window.windowStart = block.timestamp;
             window.withdrawnInWindow = 0;
-            window.snapshotBalance   = IERC20(token).balanceOf(address(this));
+            window.snapshotBalance = IERC20(token).balanceOf(address(this));
         }
 
-        uint256 windowAllowance  = (window.snapshotBalance * MAX_WITHDRAW_BPS) / BPS_DENOM;
+        uint256 windowAllowance = (window.snapshotBalance * MAX_WITHDRAW_BPS) /
+            BPS_DENOM;
         uint256 alreadyWithdrawn = window.withdrawnInWindow;
-        require(alreadyWithdrawn < windowAllowance,                "WF: monthly allowance exhausted");
-        require(amount <= windowAllowance - alreadyWithdrawn,      "WF: exceeds monthly 10% cap");
-        require(IERC20(token).balanceOf(address(this)) >= amount,  "WF: insufficient contract balance");
+        require(
+            alreadyWithdrawn < windowAllowance,
+            "WF: monthly allowance exhausted"
+        );
+        require(
+            amount <= windowAllowance - alreadyWithdrawn,
+            "WF: exceeds monthly 10% cap"
+        );
+        require(
+            IERC20(token).balanceOf(address(this)) >= amount,
+            "WF: insufficient contract balance"
+        );
 
         window.withdrawnInWindow += amount;
         IERC20(token).safeTransfer(recipient, amount);
 
-        emit OperationalWithdrawn(token, amount, window.windowStart,
-                                  window.withdrawnInWindow, windowAllowance);
+        emit OperationalWithdrawn(
+            token,
+            amount,
+            window.windowStart,
+            window.withdrawnInWindow,
+            windowAllowance
+        );
     }
 
     /// @notice View the current operational withdrawal status for a given token.
-    function getWithdrawStatus(address token)
-        external view
+    function getWithdrawStatus(
+        address token
+    )
+        external
+        view
         returns (
             uint256 windowStart,
             uint256 withdrawnSoFar,
@@ -347,22 +362,36 @@ contract WaveSendFund is
 
         if (window.windowStart == 0) {
             uint256 bal = IERC20(token).balanceOf(address(this));
-            uint256 al  = (bal * MAX_WITHDRAW_BPS) / BPS_DENOM;
+            uint256 al = (bal * MAX_WITHDRAW_BPS) / BPS_DENOM;
             return (0, 0, al, al, 0);
         }
 
         if (block.timestamp >= window.windowStart + PERIOD_30_DAYS) {
             uint256 bal = IERC20(token).balanceOf(address(this));
-            uint256 al  = (bal * MAX_WITHDRAW_BPS) / BPS_DENOM;
-            return (block.timestamp, 0, al, al, block.timestamp + PERIOD_30_DAYS);
+            uint256 al = (bal * MAX_WITHDRAW_BPS) / BPS_DENOM;
+            return (
+                block.timestamp,
+                0,
+                al,
+                al,
+                block.timestamp + PERIOD_30_DAYS
+            );
         }
 
-        windowAllowance    = (window.snapshotBalance * MAX_WITHDRAW_BPS) / BPS_DENOM;
-        withdrawnSoFar     = window.withdrawnInWindow;
+        windowAllowance =
+            (window.snapshotBalance * MAX_WITHDRAW_BPS) /
+            BPS_DENOM;
+        withdrawnSoFar = window.withdrawnInWindow;
         remainingAllowance = windowAllowance > withdrawnSoFar
-                           ? windowAllowance - withdrawnSoFar : 0;
-        return (window.windowStart, withdrawnSoFar, windowAllowance,
-                remainingAllowance, window.windowStart + PERIOD_30_DAYS);
+            ? windowAllowance - withdrawnSoFar
+            : 0;
+        return (
+            window.windowStart,
+            withdrawnSoFar,
+            windowAllowance,
+            remainingAllowance,
+            window.windowStart + PERIOD_30_DAYS
+        );
     }
 
     // ---------------------------------------------------------
@@ -377,7 +406,10 @@ contract WaveSendFund is
     }
 
     /// @notice Deposit USDT; it is swapped to WBTC and credited as Hashrate.
-    function deposit(uint256 usdtAmount, uint256 minWbtcOut) external nonReentrant {
+    function deposit(
+        uint256 usdtAmount,
+        uint256 minWbtcOut
+    ) external nonReentrant {
         require(usdtAmount > 0, "WF: zero USDT");
         require(minWbtcOut > 0, "WF: zero min out");
 
@@ -386,24 +418,35 @@ contract WaveSendFund is
         usdt.safeTransferFrom(msg.sender, address(this), usdtAmount);
         usdt.forceApprove(address(swapRouter), usdtAmount);
 
-        uint256 wbtcReceived = swapRouter.exactInputSingle(
-            ISwapRouter.ExactInputSingleParams({
-                tokenIn:           address(usdt),
-                tokenOut:          address(wbtc),
-                fee:               poolFee,
-                recipient:         address(this),
-                deadline:          block.timestamp,
-                amountIn:          usdtAmount,
-                amountOutMinimum:  minWbtcOut,
-                sqrtPriceLimitX96: 0
+        // 1. Wrap the addresses in V4's Currency type
+        Currency usdtCurrency = Currency.wrap(address(usdt));
+        Currency wbtcCurrency = Currency.wrap(address(wbtc));
+
+        // 2. Encode a 1-Hop V4 Path
+        bytes memory v4SwapPath = abi.encodePacked(
+            usdtCurrency,
+            poolFee,
+            poolTickSpacing,
+            poolHook,
+            wbtcCurrency
+        );
+
+        // 3. Execute using exactInput
+        uint256 wbtcReceived = IV4Router.exactInput(
+            IV4Router.ExactInputParams({
+                path: v4SwapPath,
+                recipient: address(this),
+                amountIn: usdtAmount,
+                amountOutMinimum: minWbtcOut,
+                deadline: block.timestamp // Add this missing 5th argument
             })
         );
 
-        UserInfo storage user    = userInfo[msg.sender];
-        user.activeHashrate      += wbtcReceived;
-        user.totalDeposited      += wbtcReceived;
-        totalPoolHashrate        += wbtcReceived;
-        user.lastUpdateTimestamp  = block.timestamp;
+        UserInfo storage user = userInfo[msg.sender];
+        user.activeHashrate += wbtcReceived;
+        user.totalDeposited += wbtcReceived;
+        totalPoolHashrate += wbtcReceived;
+        user.lastUpdateTimestamp = block.timestamp;
 
         emit UserDeposited(msg.sender, usdtAmount, wbtcReceived);
     }
@@ -419,40 +462,61 @@ contract WaveSendFund is
      *         by this contract — set `minWbtcOut` carefully.
      * @param  minWbtcOut  Minimum WBTC to receive (slippage guard, 8-decimal units).
      */
-    function depositNative(uint256 minWbtcOut) public  payable nonReentrant {
-        require(msg.value     > 0, "WF: zero native");
-        require(minWbtcOut    > 0, "WF: zero min out");
-        require(nativeFee     > 0, "WF: native fee not set");
+    function depositNative(uint256 minWbtcOut) public payable nonReentrant {
+        require(msg.value > 0, "WF: zero native");
+        require(minWbtcOut > 0, "WF: zero min out");
+        require(nativeFee > 0, "WF: native fee not set");
         require(nativeUsdtFee > 0, "WF: native usdt fee not set");
 
         _updateYield(msg.sender);
 
-        // Two-hop path: WCELO -nativeUsdtFee-> USDT -poolFee-> WBTC
-        // Uniswap V3 exactInput accepts native CELO via msg.value when the
-        // first token in the path is the wrapped native (WCELO on Celo).
-        bytes memory swapPath = Path.encode(
-            0x471EcE3750Da237f93B8E339c536989b8978a438,       // WCELO (address(0) = native, router wraps automatically)
-            nativeUsdtFee,    // CELO/USDT pool fee tier
-            address(usdt),    // intermediate: USDT
-            poolFee,          // USDT/WBTC pool fee tier
-            address(wbtc)     // final output: WBTC
+        // 1. Wrap the addresses in V4's Currency type
+        Currency wcelo = Currency.wrap(
+            0x471EcE3750Da237f93B8E339c536989b8978a438
+        );
+        Currency usdtCurrency = Currency.wrap(address(usdt));
+        Currency wbtcCurrency = Currency.wrap(address(wbtc));
+
+        // 2. Approve the V4 Swap Router
+        // Note: Because CELO is inherently ERC20, standard approval works
+        IERC20(Currency.unwrap(wcelo)).approve(
+            address(swapRouter),
+            type(uint256).max
         );
 
-        uint256 wbtcReceived = swapRouter.exactInput{value: msg.value}(
-            ISwapRouter.ExactInputParams({
-                path:             swapPath,
-                recipient:        address(this),
-                deadline:         block.timestamp,
-                amountIn:         msg.value,
-                amountOutMinimum: minWbtcOut
+        uint256 celoBal = IERC20(Currency.unwrap(wcelo)).balanceOf(
+            address(this)
+        );
+
+        // 3. Encode the V4 Path
+        // V4 Paths require: Token -> Fee -> TickSpacing -> Hook -> Token
+        bytes memory v4SwapPath = abi.encodePacked(
+            wcelo,
+            nativeUsdtFee,
+            nativeUsdtTickSpacing,
+            nativeUsdtHook,
+            usdtCurrency,
+            poolFee,
+            poolTickSpacing,
+            poolHook,
+            wbtcCurrency
+        );
+
+        // 4. Execute the V4 Swap
+        uint256 wbtcReceived = swapRouter.exactInput(
+            swapRouter.ExactInputParams({
+                path: v4SwapPath,
+                recipient: address(this),
+                amountIn: celoBal,
+                amountOutMinimum: minWbtcOut // Use the passed minimum to prevent sandwich attacks!
             })
         );
 
-        UserInfo storage user    = userInfo[msg.sender];
-        user.activeHashrate      += wbtcReceived;
-        user.totalDeposited      += wbtcReceived;
-        totalPoolHashrate        += wbtcReceived;
-        user.lastUpdateTimestamp  = block.timestamp;
+        UserInfo storage user = userInfo[msg.sender];
+        user.activeHashrate += wbtcReceived;
+        user.totalDeposited += wbtcReceived;
+        totalPoolHashrate += wbtcReceived;
+        user.lastUpdateTimestamp = block.timestamp;
 
         emit NativeDeposited(msg.sender, msg.value, wbtcReceived);
     }
@@ -469,11 +533,14 @@ contract WaveSendFund is
         _updateYield(msg.sender);
 
         UserInfo storage user = userInfo[msg.sender];
-        require(user.activeHashrate >= wbtcAmount,            "WF: insufficient hashrate");
-        require(wbtc.balanceOf(address(this)) >= wbtcAmount, "WF: pool low WBTC");
+        require(user.activeHashrate >= wbtcAmount, "WF: insufficient hashrate");
+        require(
+            wbtc.balanceOf(address(this)) >= wbtcAmount,
+            "WF: pool low WBTC"
+        );
 
         user.activeHashrate -= wbtcAmount;
-        totalPoolHashrate   -= wbtcAmount;
+        totalPoolHashrate -= wbtcAmount;
 
         wbtc.safeTransfer(msg.sender, wbtcAmount);
         emit UserWithdrawn(msg.sender, wbtcAmount);
@@ -494,22 +561,26 @@ contract WaveSendFund is
 
         user.pendingRewards = 0;
 
-        bool    usedFallback;
+        bool usedFallback;
         uint256 wsndPaid;
 
         if (user.prefersWSND) {
             wsndPaid = _wbtcToWsnd(rewards);
-            require(wsnd.balanceOf(address(this)) >= wsndPaid, "WF: insufficient WSND");
+            require(
+                wsnd.balanceOf(address(this)) >= wsndPaid,
+                "WF: insufficient WSND"
+            );
             user.totalWsndClaimed += wsndPaid;
             wsnd.safeTransfer(msg.sender, wsndPaid);
-
         } else if (wbtc.balanceOf(address(this)) < rewards) {
             wsndPaid = _wbtcToWsnd(rewards);
-            require(wsnd.balanceOf(address(this)) >= wsndPaid, "WF: insufficient WSND fallback");
+            require(
+                wsnd.balanceOf(address(this)) >= wsndPaid,
+                "WF: insufficient WSND fallback"
+            );
             user.totalWsndClaimed += wsndPaid;
             wsnd.safeTransfer(msg.sender, wsndPaid);
             usedFallback = true;
-
         } else {
             user.totalWbtcClaimed += rewards;
             wbtc.safeTransfer(msg.sender, rewards);
@@ -525,14 +596,15 @@ contract WaveSendFund is
     /// @notice Total pending yield for `account` (accrued + unclaimed), in WBTC units.
     function getPendingYield(address account) external view returns (uint256) {
         UserInfo storage user = userInfo[account];
-        return user.pendingRewards + _calculateYield(
-            user.activeHashrate,
-            user.lastUpdateTimestamp
-        );
+        return
+            user.pendingRewards +
+            _calculateYield(user.activeHashrate, user.lastUpdateTimestamp);
     }
 
     /// @notice Return the full UserInfo struct for `account`.
-    function getUserInfo(address account) external view returns (UserInfo memory) {
+    function getUserInfo(
+        address account
+    ) external view returns (UserInfo memory) {
         return userInfo[account];
     }
 
@@ -540,20 +612,25 @@ contract WaveSendFund is
     //                     INTERNAL HELPERS
     // ---------------------------------------------------------
 
-    function _calculateYield(uint256 activeHashrate, uint256 lastUpdateTimestamp)
-        internal view returns (uint256 accrued)
-    {
+    function _calculateYield(
+        uint256 activeHashrate,
+        uint256 lastUpdateTimestamp
+    ) internal view returns (uint256 accrued) {
         if (activeHashrate == 0 || lastUpdateTimestamp == 0) return 0;
-        if (block.timestamp <= lastUpdateTimestamp)           return 0;
+        if (block.timestamp <= lastUpdateTimestamp) return 0;
         uint256 timeElapsed = block.timestamp - lastUpdateTimestamp;
-        accrued = (activeHashrate * YIELD_RATE_NUM * timeElapsed)
-                  / (YIELD_RATE_DEN * PERIOD_30_DAYS);
+        accrued =
+            (activeHashrate * YIELD_RATE_NUM * timeElapsed) /
+            (YIELD_RATE_DEN * PERIOD_30_DAYS);
     }
 
     function _updateYield(address account) internal {
         UserInfo storage user = userInfo[account];
         if (user.activeHashrate > 0 && user.lastUpdateTimestamp > 0) {
-            uint256 accrued = _calculateYield(user.activeHashrate, user.lastUpdateTimestamp);
+            uint256 accrued = _calculateYield(
+                user.activeHashrate,
+                user.lastUpdateTimestamp
+            );
             if (accrued > 0) user.pendingRewards += accrued;
         }
         user.lastUpdateTimestamp = block.timestamp;
