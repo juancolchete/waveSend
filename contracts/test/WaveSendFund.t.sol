@@ -117,7 +117,7 @@ contract ReentrancyAttacker {
     uint256 public attackCount;
     
     constructor(address _fund) {
-        fund = WaveSendFund(payable(_fund));
+        fund = WaveSendFund(payable(_fund)); // FIXED: payable cast
     }
 
     // Fallback triggered when WBTC/WSND is transferred to this address.
@@ -170,12 +170,19 @@ abstract contract WaveSendFundBase is Test {
         wbtcToken = new MockERC20("Celo WBTC", "WBTC", 8);
         wsndToken = new MockERC20("WaveSend",  "WSND", 18);
 
-        // Etch mock ERC20 bytecode into the hardcoded CELO address so forceApprove succeeds
+        // FIXED: Etch mock ERC20 bytecode into the hardcoded CELO address so forceApprove succeeds
         MockERC20 mockCelo = new MockERC20("Celo Native", "CELO", 18);
         vm.etch(0x471EcE3750Da237f93B8E339c536989b8978a438, address(mockCelo).code);
 
         // Deploy mock router.
         router = new MockSwapRouter(address(usdtToken), address(wbtcToken));
+
+        // FIXED: Approve the router for the native CELO token
+        vm.prank(alice);
+        mockCelo.approve(address(router), type(uint256).max);
+        
+        vm.prank(bob);
+        mockCelo.approve(address(router), type(uint256).max);
 
         // Deploy WaveSendFund behind a UUPS proxy.
         WaveSendFund impl = new WaveSendFund();
