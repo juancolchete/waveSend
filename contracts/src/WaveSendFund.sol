@@ -193,7 +193,6 @@ contract WaveSendFund is
         require(_router != address(0), "WF: zero router");
 
         __AccessControl_init();
-        __ReentrancyGuard_init(); // FIX-1: must initialise upgradeable guard
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(OPERATOR_ROLE,      _admin);
@@ -379,9 +378,6 @@ contract WaveSendFund is
             wbtcCurrency
         );
 
-        // FIX-3: Call on the *instance* (swapRouter), not on the interface type (IV4Router).
-        //        IV4Router.exactInput(...) is a static-call on the type, not a dispatch.
-        // FIX-4: IV4Router.ExactInputParams has no `deadline` field (that is V3); removed.
         uint256 wbtcReceived = swapRouter.exactInput(
             IV4Router.ExactInputParams({
                 path:             path,
