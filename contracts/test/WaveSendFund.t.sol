@@ -117,7 +117,7 @@ contract ReentrancyAttacker {
     uint256 public attackCount;
     
     constructor(address _fund) {
-        fund = WaveSendFund(_fund);
+        fund = WaveSendFund(payable(_fund)); // <--- FIXED TYPE CONVERSION HERE
     }
 
     // Fallback triggered when WBTC/WSND is transferred to this address.
