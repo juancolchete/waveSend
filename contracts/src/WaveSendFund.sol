@@ -33,30 +33,6 @@ interface IV4RouterMock {
 //                     WAVESEND FUND CONTRACT
 // =============================================================
 
-/**
- * @title  WaveSendFund
- * @author Senior Smart Contract Developer
- * @notice A UUPS-upgradeable DeFi Mining Pool on Celo Mainnet operated by Wavesend.
- *
- * Role architecture:
- * DEFAULT_ADMIN_ROLE  -- can grant/revoke all roles; assigned to deployer.
- * OPERATOR_ROLE       -- admin setters (fee, router, ratio) + operationalWithdraw.
- * UPGRADER_ROLE       -- authorises UUPS proxy upgrades.
- *
- * Yield formula (linear, per second):
- * pendingRewards = (activeHashrate x 100 x timeElapsed) / (10_000 x 2_592_000)
- *
- * Decimals:
- * USDT  -- 6  decimals  (Celo bridged USDT)
- * WBTC  -- 8  decimals  (Celo bridged WBTC)
- * WSND  -- 18 decimals  (Wave Send Token)
- *
- * OZ v5 notes:
- * - AccessControlUpgradeable replaces OwnableUpgradeable.
- * - ReentrancyGuard used.
- * - __UUPSUpgradeable_init() removed in OZ v5.
- * - safeApprove removed in OZ v5 -- forceApprove used instead.
- */
 contract WaveSendFund is
     Initializable,
     UUPSUpgradeable,
@@ -69,14 +45,11 @@ contract WaveSendFund is
     //                          ROLES
     // ---------------------------------------------------------
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-
-    /// @notice Authorises UUPS proxy upgrades.
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
     // ---------------------------------------------------------
     //                        CONSTANTS
     // ---------------------------------------------------------
-
     uint256 public constant PERIOD_30_DAYS  = 2_592_000;
     uint256 public constant YIELD_RATE_NUM  = 100;
     uint256 public constant YIELD_RATE_DEN  = 10_000;
@@ -88,7 +61,6 @@ contract WaveSendFund is
     // ---------------------------------------------------------
     //                      STATE VARIABLES
     // ---------------------------------------------------------
-
     IERC20        public usdt;
     IERC20        public wbtc;
     IERC20        public wsnd;
@@ -97,23 +69,19 @@ contract WaveSendFund is
     uint256 public wsndPerWbtc;
     uint256 public totalPoolHashrate;
 
-    // V4 pool params: USDT <-> WBTC pool
+    // V4 pool params
     uint24  public poolFee;
     int24   public poolTickSpacing;
     address public poolHook;
 
-    // V4 pool params: CELO <-> USDT pool (first hop for native deposits)
     uint24  public nativeUsdtFee;
     int24   public nativeUsdtTickSpacing;
     address public nativeUsdtHook;
-
-    // Kept for backward-compatible getter; alias for nativeUsdtFee context.
     uint24  public nativeFee;
 
     // ---------------------------------------------------------
     //              OPERATIONAL WITHDRAWAL TRACKING
     // ---------------------------------------------------------
-
     struct WithdrawWindow {
         uint256 windowStart;
         uint256 withdrawnInWindow;
@@ -125,7 +93,6 @@ contract WaveSendFund is
     // ---------------------------------------------------------
     //                        USER DATA
     // ---------------------------------------------------------
-
     struct UserInfo {
         uint256 activeHashrate;
         uint256 totalDeposited;
@@ -141,7 +108,6 @@ contract WaveSendFund is
     // ---------------------------------------------------------
     //                          EVENTS
     // ---------------------------------------------------------
-
     event UserDeposited(address indexed user, uint256 usdtIn, uint256 wbtcReceived);
     event UserWithdrawn(address indexed user, uint256 wbtcAmount);
     event RewardClaimed(address indexed user, uint256 wbtcReward, uint256 wsndPaid, bool usedFallback);
@@ -164,7 +130,6 @@ contract WaveSendFund is
     // ---------------------------------------------------------
     //                       CONSTRUCTOR
     // ---------------------------------------------------------
-
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -173,41 +138,44 @@ contract WaveSendFund is
     // ---------------------------------------------------------
     //                       INITIALIZER
     // ---------------------------------------------------------
+    
+    // Struct to bypass "Stack too deep"
+    struct InitParams {
+        address admin;
+        address usdt;
+        address wbtc;
+        address wsnd;
+        address router;
+        uint24  poolFee;
+        int24   poolTickSpacing;
+        uint24  nativeFee;
+        uint24  nativeUsdtFee;
+        int24   nativeUsdtTickSpacing;
+    }
 
-    function initialize(
-        address _admin,
-        address _usdt,
-        address _wbtc,
-        address _wsnd,
-        address _router,
-        uint24  _poolFee,
-        int24   _poolTickSpacing,
-        uint24  _nativeFee,
-        uint24  _nativeUsdtFee,
-        int24   _nativeUsdtTickSpacing
-    ) external initializer {
-        require(_admin  != address(0), "WF: zero admin");
-        require(_usdt   != address(0), "WF: zero USDT");
-        require(_wbtc   != address(0), "WF: zero WBTC");
-        require(_wsnd   != address(0), "WF: zero WSND");
-        require(_router != address(0), "WF: zero router");
+    function initialize(InitParams calldata params) external initializer {
+        require(params.admin  != address(0), "WF: zero admin");
+        require(params.usdt   != address(0), "WF: zero USDT");
+        require(params.wbtc   != address(0), "WF: zero WBTC");
+        require(params.wsnd   != address(0), "WF: zero WSND");
+        require(params.router != address(0), "WF: zero router");
 
         __AccessControl_init();
 
-        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
-        _grantRole(OPERATOR_ROLE,      _admin);
-        _grantRole(UPGRADER_ROLE,      _admin);
+        _grantRole(DEFAULT_ADMIN_ROLE, params.admin);
+        _grantRole(OPERATOR_ROLE,      params.admin);
+        _grantRole(UPGRADER_ROLE,      params.admin);
 
-        usdt        = IERC20(_usdt);
-        wbtc        = IERC20(_wbtc);
-        wsnd        = IERC20(_wsnd);
-        swapRouter  = IV4RouterMock(_router);
+        usdt        = IERC20(params.usdt);
+        wbtc        = IERC20(params.wbtc);
+        wsnd        = IERC20(params.wsnd);
+        swapRouter  = IV4RouterMock(params.router);
 
-        poolFee               = _poolFee;
-        poolTickSpacing       = _poolTickSpacing;
-        nativeFee             = _nativeFee;
-        nativeUsdtFee         = _nativeUsdtFee;
-        nativeUsdtTickSpacing = _nativeUsdtTickSpacing;
+        poolFee               = params.poolFee;
+        poolTickSpacing       = params.poolTickSpacing;
+        nativeFee             = params.nativeFee;
+        nativeUsdtFee         = params.nativeUsdtFee;
+        nativeUsdtTickSpacing = params.nativeUsdtTickSpacing;
 
         wsndPerWbtc = WSND_UNIT; // default 1:1 
     }
@@ -215,13 +183,11 @@ contract WaveSendFund is
     // ---------------------------------------------------------
     //                     UUPS AUTHORISATION
     // ---------------------------------------------------------
-
     function _authorizeUpgrade(address) internal override onlyRole(UPGRADER_ROLE) {}
 
     // ---------------------------------------------------------
     //                       ADMIN SETTERS
     // ---------------------------------------------------------
-
     function setWsndPerWbtc(uint256 _wsndPerWbtc) external onlyRole(OPERATOR_ROLE) {
         require(_wsndPerWbtc > 0, "WF: ratio zero");
         wsndPerWbtc = _wsndPerWbtc;
@@ -252,7 +218,6 @@ contract WaveSendFund is
     // ---------------------------------------------------------
     //              COMPANY LIQUIDITY FUNCTIONS
     // ---------------------------------------------------------
-
     function fundDeposit(address token, uint256 amount) external nonReentrant {
         require(token  != address(0), "WF: zero token");
         require(amount > 0,           "WF: zero amount");
@@ -324,7 +289,6 @@ contract WaveSendFund is
     // ---------------------------------------------------------
     //                    USER-FACING FUNCTIONS
     // ---------------------------------------------------------
-
     function setRewardPreference(bool _prefersWSND) external {
         _updateYield(msg.sender);
         userInfo[msg.sender].prefersWSND = _prefersWSND;
@@ -470,7 +434,6 @@ contract WaveSendFund is
     // ---------------------------------------------------------
     //                     INTERNAL HELPERS
     // ---------------------------------------------------------
-
     function _updateYield(address _user) internal {
         UserInfo storage user = userInfo[_user];
         if (user.lastUpdateTimestamp == 0) {
@@ -488,7 +451,6 @@ contract WaveSendFund is
     // ---------------------------------------------------------
     //                       VIEW HELPERS
     // ---------------------------------------------------------
-
     function pendingRewardsOf(address _user) external view returns (uint256) {
         UserInfo storage user = userInfo[_user];
         uint256 accrued = user.pendingRewards;
