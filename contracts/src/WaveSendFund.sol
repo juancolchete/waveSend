@@ -8,10 +8,7 @@ pragma solidity ^0.8.30;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-// FIX-1: ReentrancyGuardUpgradeable instead of the non-upgradeable variant.
-//        The non-upgradeable version sets its lock in the constructor, which
-//        never runs on a proxy, leaving the slot uninitialised and the guard broken.
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
@@ -41,7 +38,7 @@ import {IV4Router} from "v4-periphery/src/interfaces/IV4Router.sol";
  *
  *         OZ v5 notes:
  *           - AccessControlUpgradeable replaces OwnableUpgradeable.
- *           - ReentrancyGuardUpgradeable used (non-upgradeable is proxy-incompatible).
+ *           - ReentrancyGuard used.
  *           - __UUPSUpgradeable_init() removed in OZ v5.
  *           - safeApprove removed in OZ v5 -- forceApprove used instead.
  */
@@ -49,16 +46,13 @@ contract WaveSendFund is
     Initializable,
     UUPSUpgradeable,
     AccessControlUpgradeable,
-    ReentrancyGuardUpgradeable  // FIX-1 (continued)
+    ReentrancyGuard  // FIX-1 (continued)
 {
     using SafeERC20 for IERC20;
 
     // ---------------------------------------------------------
     //                          ROLES
     // ---------------------------------------------------------
-
-    // FIX-2: Role NatSpec comments were swapped in the original.
-    /// @notice Can call admin setters and operationalWithdraw.
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     /// @notice Authorises UUPS proxy upgrades.
