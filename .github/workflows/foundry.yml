@@ -21,7 +21,7 @@ jobs:
           version: nightly
 
       - name: Run Build
-        run: cd contracts && forge build
+        run: cd contracts && forge build WaveSendFund.sol
 
       - name: Run Tests
         run: cd contracts && forge test -vvv
