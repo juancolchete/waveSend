@@ -71,8 +71,6 @@ flowchart TD
 - *Twilio*: Webhook (SMS API) - A webhook is the automated system that triggers the sending of the message.
 - *NextJS*: Applied nn the webapp.
 
-## Smart Contract Feature
-
 ### Transaction Process 
 - initiateTransaction: Verifies the signature and queues the transaction for processing via SMS relay.
 - processTransaction: Decodes the data, validates it, and updates the blockchain state (e.g., transferring funds).
