@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
     try {
       await axios.request(reqconfig2)
     } catch (e) {
-      console.log(eval("e.response"))
+      console.log(e.response)
     }
   }
   const response = await axios.post(chains[sepBody[1]].url, {
