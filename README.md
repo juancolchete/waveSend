@@ -119,7 +119,7 @@ flowchart TD
 ### Phase 2: Expansion
 - Wave Send Fund
 - Support for NFTs
-- Expasion to Lightning Network
+- Expansion to Lightning Network
 - Native bridge with Celo Network
 
 ### Phase 3: Partnership
