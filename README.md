@@ -58,7 +58,7 @@ flowchart TD
 - *Global Impact*: Expands the reach of digital payments to underserved areas, leveraging the 98% global SMS availability.
 - *Whole Enhancement*: Enhances the resilience of the payment ecosystem by functioning independently of internet connectivity.
 - *Financial Inclusion*: Promotes financial inclusion, broadening the user base without requiring advanced technology.
-- *Barriedless*: Reduces dependency on expensive hardware or data plans, lowering barriers to entry for digital transactions.
+- *Barrier free*: Reduces dependency on expensive hardware or data plans, lowering barriers to entry for digital transactions.
 - *Overall Security*: Optimizes transaction processing, keeping operational costs low while maintaining blockchain security.
 - *Trustfull System*: Builds trust in the system by ensuring users can verify completed transactions easily.
 
