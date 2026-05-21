@@ -186,7 +186,7 @@ const connectWithMiniPay = async () => {
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Connect Wallet</DialogTitle>
-              <DialogDescription>Generate a new private key or import an existing one.</DialogDescription>
+              <DialogDescription>Generate a new private key or import an existing one. Your key stay on your device we never share it.</DialogDescription>
             </DialogHeader>
             <Tabs defaultValue="generate" className="w-full">
               <TabsList className="grid w-full grid-cols-3">
