@@ -8,46 +8,26 @@ import {WaveSendFund} from "../src/WaveSendFund.sol";
 /**
  * @title  DeployWaveSendFund
  * @notice Foundry deployment script for WaveSendFund on Celo Mainnet.
- *
- * Usage (dry-run):
- * forge script script/DeployWaveSendFund.s.sol \
- * --rpc-url $CELO_RPC_URL \
- * --sig "run()" \
- * -vvvv
- *
- * Usage (broadcast):
- * forge script script/DeployWaveSendFund.s.sol \
- * --rpc-url $CELO_RPC_URL \
- * --broadcast \
- * --verify \
- * --etherscan-api-key $CELOSCAN_API_KEY \
- * -vvvv
- *
- * Required environment variables (set in .env):
- * DEPLOYER_PRIVATE_KEY   -- private key of the deploying wallet
- * ADMIN_ADDRESS          -- address that receives all roles (DEFAULT_ADMIN, OPERATOR, UPGRADER)
- * CELO_USDT_ADDRESS      -- Celo bridged USDT token
- * CELO_WBTC_ADDRESS      -- Celo bridged WBTC token (8 decimals)
- * WSND_ADDRESS           -- WaveSend Token (18 decimals)
- * UNISWAP_V3_ROUTER      -- Uniswap V3 SwapRouter on Celo
  */
 contract DeployWaveSendFund is Script {
     function run() external {
-        // Load configuration
+        // Only load the private key as a standalone variable
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        address admin = vm.envAddress("ADMIN_ADDRESS");
-        address usdt = vm.envAddress("CELO_USDT_ADDRESS");
-        address wbtc = vm.envAddress("CELO_WBTC_ADDRESS");
-        address wsnd = vm.envAddress("WSND_ADDRESS");
-        address router = vm.envAddress("UNISWAP_V3_ROUTER");
 
-        uint24 poolFee = uint24(vm.envUint("POOL_FEE"));
-        uint24 nativeFee = uint24(vm.envUint("NATIVE_FEE"));
-        uint24 nativeUsdtFee = uint24(vm.envUint("NATIVE_USDT_FEE"));
-
-        // FIX: Cast explicitly to int24 (using vm.envInt to handle signed values properly)
-        int24 poolFeeTickSpacing = int24(vm.envInt("POOL_FEE_TICK_SPACING"));
-        int24 nativeUsdtFeeTickSpacing = int24(vm.envInt("NATIVE_USDT_FEE_TICK_SPACING"));
+        // Load all environment variables directly into the struct 
+        // to bypass the "Stack too deep" limit in the EVM.
+        WaveSendFund.InitParams memory params = WaveSendFund.InitParams({
+            admin: vm.envAddress("ADMIN_ADDRESS"),
+            usdt: vm.envAddress("CELO_USDT_ADDRESS"),
+            wbtc: vm.envAddress("CELO_WBTC_ADDRESS"),
+            wsnd: vm.envAddress("WSND_ADDRESS"),
+            router: vm.envAddress("UNISWAP_V3_ROUTER"),
+            poolFee: uint24(vm.envUint("POOL_FEE")),
+            poolTickSpacing: int24(vm.envInt("POOL_FEE_TICK_SPACING")),
+            nativeFee: uint24(vm.envUint("NATIVE_FEE")),
+            nativeUsdtFee: uint24(vm.envUint("NATIVE_USDT_FEE")),
+            nativeUsdtTickSpacing: int24(vm.envInt("NATIVE_USDT_FEE_TICK_SPACING"))
+        });
 
         vm.startBroadcast(deployerPrivateKey);
 
@@ -55,27 +35,13 @@ contract DeployWaveSendFund is Script {
         WaveSendFund impl = new WaveSendFund();
         console.log("Implementation deployed at:", address(impl));
 
-        // 2. Package parameters into the struct to bypass "Stack too deep"
-        WaveSendFund.InitParams memory initParams = WaveSendFund.InitParams({
-            admin: admin,
-            usdt: usdt,
-            wbtc: wbtc,
-            wsnd: wsnd,
-            router: router,
-            poolFee: poolFee,
-            poolTickSpacing: poolFeeTickSpacing,
-            nativeFee: nativeFee,
-            nativeUsdtFee: nativeUsdtFee,
-            nativeUsdtTickSpacing: nativeUsdtFeeTickSpacing
-        });
-
-        // 3. Encode the call to the initialize function
+        // 2. Encode the call to the initialize function
         bytes memory initData = abi.encodeCall(
             WaveSendFund.initialize,
-            (initParams) // FIX: Pass the struct as the single argument
+            (params)
         );
 
-        // 4. Deploy Proxy
+        // 3. Deploy Proxy
         ERC1967Proxy proxyContract = new ERC1967Proxy(address(impl), initData);
         WaveSendFund proxy = WaveSendFund(payable(address(proxyContract)));
         console.log("Proxy deployed at:", address(proxy));
@@ -85,33 +51,35 @@ contract DeployWaveSendFund is Script {
         // ---------------------------------------------------------
         //                     VERIFICATIONS
         // ---------------------------------------------------------
+        // We now reference params.admin, params.usdt, etc., avoiding stack limits
+        
         require(
-            proxy.hasRole(proxy.DEFAULT_ADMIN_ROLE(), admin),
+            proxy.hasRole(proxy.DEFAULT_ADMIN_ROLE(), params.admin),
             "Verify: DEFAULT_ADMIN_ROLE not set"
         );
         require(
-            proxy.hasRole(proxy.OPERATOR_ROLE(), admin),
+            proxy.hasRole(proxy.OPERATOR_ROLE(), params.admin),
             "Verify: OPERATOR_ROLE not set"
         );
         require(
-            proxy.hasRole(proxy.UPGRADER_ROLE(), admin),
+            proxy.hasRole(proxy.UPGRADER_ROLE(), params.admin),
             "Verify: UPGRADER_ROLE not set"
         );
         console.log("[OK] Roles assigned to admin");
 
         // Tokens
-        require(address(proxy.usdt()) == usdt, "Verify: USDT mismatch");
-        require(address(proxy.wbtc()) == wbtc, "Verify: WBTC mismatch");
-        require(address(proxy.wsnd()) == wsnd, "Verify: WSND mismatch");
+        require(address(proxy.usdt()) == params.usdt, "Verify: USDT mismatch");
+        require(address(proxy.wbtc()) == params.wbtc, "Verify: WBTC mismatch");
+        require(address(proxy.wsnd()) == params.wsnd, "Verify: WSND mismatch");
         console.log("[OK] Token addresses");
 
         // Router & fee
         require(
-            address(proxy.swapRouter()) == router,
+            address(proxy.swapRouter()) == params.router,
             "Verify: router mismatch"
         );
-        require(proxy.poolFee() == poolFee, "Verify: poolFee mismatch");
-        require(proxy.nativeFee() == nativeFee, "Verify: nativeFee mismatch");
+        require(proxy.poolFee() == params.poolFee, "Verify: poolFee mismatch");
+        require(proxy.nativeFee() == params.nativeFee, "Verify: nativeFee mismatch");
         console.log("[OK] Router and pool fee");
 
         // Default ratio
