@@ -1,8 +1,8 @@
 docker compose -f ./local-blockchain.yml down
 source .env
 docker compose -f ./local-blockchain.yml up -d
-  
-RPC_URL_FORK="http://${docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' anvil-local}:8545"
+CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' anvil-local)
+RPC_URL_FORK="http://$CONTAINER_IP:8545"
   
 echo "Waiting for RPC connection at: $RPC_URL_FORK..."
 STARTING_BLOCKCHAIN=true
