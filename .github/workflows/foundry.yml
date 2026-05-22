@@ -26,5 +26,5 @@ jobs:
       - name: Run Tests
         run: cd contracts && forge test -vvv
       - name: Deployment test
-        run: bash contracts/deployFundOnForkCI.sh
+        run: cd contracts && bash deployFundOnForkCI.sh
         
