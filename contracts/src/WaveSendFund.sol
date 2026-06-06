@@ -16,11 +16,10 @@ import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 // =============================================================
 //               Custom V4 Router Wrapper Interface
 // =============================================================
-interface IV4RouterMock {
+interface ISwapRouter02 {
     struct ExactInputParams {
         bytes path;
         address recipient;
-        uint256 deadline; 
         uint256 amountIn;
         uint256 amountOutMinimum;
     }
@@ -64,7 +63,7 @@ contract WaveSendFund is
     IERC20        public usdt;
     IERC20        public wbtc;
     IERC20        public wsnd;
-    IV4RouterMock public swapRouter;
+    ISwapRouter02 public swapRouter;
 
     uint256 public wsndPerWbtc;
     uint256 public totalPoolHashrate;
@@ -169,7 +168,7 @@ contract WaveSendFund is
         usdt        = IERC20(params.usdt);
         wbtc        = IERC20(params.wbtc);
         wsnd        = IERC20(params.wsnd);
-        swapRouter  = IV4RouterMock(params.router);
+        swapRouter  = ISwapRouter02(params.router);
 
         poolFee               = params.poolFee;
         poolTickSpacing       = params.poolTickSpacing;
@@ -201,7 +200,7 @@ contract WaveSendFund is
 
     function setSwapRouter(address _router) external onlyRole(OPERATOR_ROLE) {
         require(_router != address(0), "WF: zero router");
-        swapRouter = IV4RouterMock(_router);
+        swapRouter = ISwapRouter02(_router);
         emit RouterUpdated(_router);
     }
 
@@ -304,22 +303,16 @@ contract WaveSendFund is
         usdt.safeTransferFrom(msg.sender, address(this), usdtAmount);
         usdt.forceApprove(address(swapRouter), usdtAmount);
 
-        Currency usdtCurrency = Currency.wrap(address(usdt));
-        Currency wbtcCurrency = Currency.wrap(address(wbtc));
-
         bytes memory path = abi.encodePacked(
-            usdtCurrency,
+            address(usdt),
             poolFee,
-            poolTickSpacing,
-            poolHook,
-            wbtcCurrency
+            address(wbtc)
         );
 
         uint256 wbtcReceived = swapRouter.exactInput(
-            IV4RouterMock.ExactInputParams({
+            ISwapRouter02.ExactInputParams({
                 path:             path,
                 recipient:        address(this),
-                deadline:         block.timestamp,
                 amountIn:         usdtAmount,
                 amountOutMinimum: minWbtcOut
             })
@@ -347,27 +340,16 @@ contract WaveSendFund is
 
         IERC20(celoToken).forceApprove(address(swapRouter), celoAmountIn);
 
-        Currency celoCurrency = Currency.wrap(celoToken);
-        Currency usdtCurrency = Currency.wrap(address(usdt));
-        Currency wbtcCurrency = Currency.wrap(address(wbtc));
-
         bytes memory path = abi.encodePacked(
-            celoCurrency,
-            nativeUsdtFee,
-            nativeUsdtTickSpacing,
-            nativeUsdtHook,
-            usdtCurrency,
-            poolFee,
-            poolTickSpacing,
-            poolHook,
-            wbtcCurrency
+            celoToken,
+            nativeFee,
+            address(wbtc)
         );
 
         uint256 wbtcReceived = swapRouter.exactInput(
-            IV4RouterMock.ExactInputParams({
+            ISwapRouter02.ExactInputParams({
                 path:             path,
                 recipient:        address(this),
-                deadline:         block.timestamp,
                 amountIn:         celoAmountIn,
                 amountOutMinimum: minWbtcOut
             })
@@ -382,7 +364,9 @@ contract WaveSendFund is
         emit NativeDeposited(msg.sender, msg.value, wbtcReceived);
     }
 
-    receive() external payable {}
+    receive() external payable {
+        depositNative(1);
+    }
 
     function withdraw(uint256 wbtcAmount) external nonReentrant {
         require(wbtcAmount > 0, "WF: zero amount");

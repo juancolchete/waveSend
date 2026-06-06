@@ -4,7 +4,7 @@ services:
     container_name: local-anvil
     ports:
       - "8545:8545"
-    entrypoint: ["anvil","--steps-tracing", "--host", "0.0.0.0", "--allow-origin", "*","--fork-url","${CELO_RPC_URL}","--gas-price", "200000000000"]
+    entrypoint: ["anvil","--steps-tracing", "--host", "0.0.0.0", "--allow-origin", "*","--fork-url","${CELO_RPC_URL}","--gas-price", "200000000000","--no-rate-limit"]
 
   otterscan:
     image: otterscan/otterscan:latest

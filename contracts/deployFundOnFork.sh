@@ -22,5 +22,6 @@ while $STARTING_BLOCKCHAIN; do
   fi
   sleep 1 
 done   
-cast rpc anvil_setBalance $DEPLOYER_ADDRESS  $(cast --to-hex $(cast --to-wei 1000000000 ether)) --rpc-url $RPC_URL_FORK
+cast rpc anvil_impersonateAccount $CELO_WHALE_SENDER
+cast send $DEPLOYER_ADDRESS --value 1000000000000000000000 --from $CELO_WHALE_SENDER --unlocked --rpc-url $RPC_URL_FORK --gas-limit 500000
 forge script DeployWaveSendFund --rpc-url $RPC_URL_FORK --broadcast --gas-price 200000000000

@@ -8,7 +8,7 @@ import {console} from "forge-std/console.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 // ── Contract under test ────────────────────────────────────────────────────────
-import {WaveSendFund, IV4RouterMock} from "../src/WaveSendFund.sol";
+import {WaveSendFund, ISwapRouter02} from "../src/WaveSendFund.sol";
 
 // =============================================================================
 //                          MOCK TOKENS
@@ -74,7 +74,7 @@ contract MockERC20 is Test {
 //                          MOCK SWAP ROUTER
 // =============================================================================
 
-contract MockSwapRouter is IV4RouterMock {
+contract MockSwapRouter is ISwapRouter02 {
     uint256   public wbtcOut;
     uint256   public wbtcOutNative;
     MockERC20 public usdtToken;
@@ -88,11 +88,17 @@ contract MockSwapRouter is IV4RouterMock {
     function setWbtcOut(uint256 _wbtcOut) external { wbtcOut = _wbtcOut; }
     function setWbtcOutNative(uint256 _wbtcOut) external { wbtcOutNative = _wbtcOut; }
 
-    function exactInput(IV4RouterMock.ExactInputParams calldata params)
+    function exactInput(ISwapRouter02.ExactInputParams calldata params)
         external payable override returns (uint256 amountOut)
     {
-        // Use path length to distinguish swap types (1-hop vs 2-hop)
-        if (params.path.length > 80) {
+        address tokenIn;
+        bytes memory p = params.path;
+        assembly {
+            tokenIn := shr(96, mload(add(p, 32)))
+        }
+
+        // Use tokenIn to distinguish swap types
+        if (tokenIn == 0x471EcE3750Da237f93B8E339c536989b8978a438) {
             // --- NATIVE CELO DEPOSIT ---
             // Verify the fund correctly approved the router for the etched CELO token
             require(
@@ -1374,15 +1380,12 @@ contract WaveSendFund_DepositNative is WaveSendFundBase {
         fund.setNativeFee(500);
     }
 
-    function test_receive_acceptsFundsWithoutDeposit() public {
-        // A plain CELO transfer to the contract no longer triggers a deposit.
+    function test_receive_triggersDeposit() public {
         uint256 hashrateBefore = fund.totalPoolHashrate();
         vm.deal(address(this), 1 ether);
         (bool ok,) = address(fund).call{value: 1 ether}("");
         assertTrue(ok);
-        // hashrate must have remained exactly the same
-        assertEq(fund.totalPoolHashrate(), hashrateBefore);
-        // balance must have increased
-        assertEq(address(fund).balance, 1 ether);
+        // hashrate must have increased
+        assertEq(fund.totalPoolHashrate(), hashrateBefore + WBTC_1);
     }
 }
